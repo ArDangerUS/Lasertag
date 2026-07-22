@@ -22,6 +22,7 @@ type Props = {
 };
 
 const G = "#56EF02";
+const PERK_LIMIT = 4; // perks shown before "показати все"
 
 export default function BookingClient({
   catalog,
@@ -51,6 +52,7 @@ export default function BookingClient({
   // Package flow: which package's time-picker is open, and the chosen booking.
   const [pkgOpenId, setPkgOpenId] = useState<string | null>(null);
   const [pkgBooking, setPkgBooking] = useState<{ packageId: string; startMin: number } | null>(null);
+  const [expandedPerks, setExpandedPerks] = useState<Record<string, boolean>>({});
 
   const location = locations.find((l) => l.id === locationId) ?? locations[0];
   const weekend = usesWeekendRate(date);
@@ -511,7 +513,13 @@ export default function BookingClient({
                     const open = pkgOpenId === p.id;
                     const chosenPkg = pkgBooking?.packageId === p.id;
                     const overCap = people > p.maxPeople;
-                    const starts = open && !overCap ? packageStarts(p) : [];
+                    const perksExpanded = !!expandedPerks[p.id];
+                    const shownPerks = perksExpanded ? p.perks : p.perks.slice(0, PERK_LIMIT);
+                    // all 30-min starts; unavailable ones are shown greyed-out
+                    const allStarts: number[] = [];
+                    for (let m = location.openMin; m < location.closeMin; m += SLOT_STEP_MIN)
+                      allStarts.push(m);
+                    const anyFits = open && !overCap && allStarts.some((m) => packageFits(p, m));
                     return (
                       <div
                         key={p.id}
@@ -523,19 +531,29 @@ export default function BookingClient({
                           <span className="text-xl">{p.icon}</span>
                           <span className="text-[15px] font-extrabold text-brand-ink">{p.name}</span>
                         </div>
-                        <ul className="mt-3 flex flex-1 flex-col gap-1.5">
-                          {p.perks.map((perk, i) => (
+                        <ul className="mt-3 flex flex-col gap-1.5">
+                          {shownPerks.map((perk, i) => (
                             <li key={i} className="flex gap-2 text-[13px] leading-snug text-[#555]">
                               <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#56EF02]" />
                               <span>{perk}</span>
                             </li>
                           ))}
                         </ul>
-                        <div className="mt-4 text-[13px] text-[#888]">
+                        {p.perks.length > PERK_LIMIT && (
+                          <button
+                            onClick={() => setExpandedPerks((s) => ({ ...s, [p.id]: !perksExpanded }))}
+                            className="mt-2 self-start text-[12px] font-bold text-brand-green"
+                          >
+                            {perksExpanded
+                              ? dict.pkgShowLess
+                              : dict.pkgShowMore.replace("{n}", String(p.perks.length - PERK_LIMIT))}
+                          </button>
+                        )}
+                        <div className="mt-auto pt-4 text-[13px] text-[#888]">
                           <span className="text-[18px] font-extrabold text-brand-ink">
                             {fmtMoney(price)}
                           </span>{" "}
-                          {dict.uah} · {weekend ? "ПТ-НД" : "ПН-ЧТ"}
+                          {dict.uah}
                         </div>
 
                         {chosenPkg ? (
@@ -564,29 +582,40 @@ export default function BookingClient({
                               <div className="rounded-xl bg-[#fdf3e3] p-3 text-[12px] leading-relaxed text-[#b6791b]">
                                 {dict.pkgMaxPeople.replace("{max}", String(p.maxPeople))}
                               </div>
-                            ) : starts.length === 0 ? (
+                            ) : !anyFits ? (
                               <div className="rounded-xl border border-dashed border-[#ddd] p-3 text-center text-[12px] text-[#999]">
                                 {dict.pkgNoTime}
                               </div>
                             ) : (
                               <>
-                                <div className="text-[11px] font-bold tracking-wide text-[#777]">
+                                <div className="mb-2 text-[11px] font-bold tracking-wide text-[#777]">
                                   {dict.pkgStartTime}
                                 </div>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  {starts.map((m) => (
-                                    <button
-                                      key={m}
-                                      onClick={() => {
-                                        setPkgBooking({ packageId: p.id, startMin: m });
-                                        setPkgOpenId(null);
-                                        setError("");
-                                      }}
-                                      className="rounded-full border border-[#E5E5E5] bg-white px-3 py-1.5 text-[13px] font-semibold hover:border-[#56EF02]"
-                                    >
-                                      {minToHHMM(m)}
-                                    </button>
-                                  ))}
+                                {/* 2-column grid: rows = hours, cols = :00 / :30 */}
+                                <div className="grid grid-cols-2 gap-2">
+                                  {allStarts.map((m) => {
+                                    const fits = packageFits(p, m);
+                                    return fits ? (
+                                      <button
+                                        key={m}
+                                        onClick={() => {
+                                          setPkgBooking({ packageId: p.id, startMin: m });
+                                          setPkgOpenId(null);
+                                          setError("");
+                                        }}
+                                        className="rounded-lg border border-[#E5E5E5] bg-white py-2 text-center text-[13px] font-semibold text-brand-ink hover:border-[#56EF02] hover:bg-[#f6fee9]"
+                                      >
+                                        {minToHHMM(m)}
+                                      </button>
+                                    ) : (
+                                      <div
+                                        key={m}
+                                        className="rounded-lg border border-[#f0f0f0] bg-[#f4f4f4] py-2 text-center text-[13px] text-[#c4c4c4] line-through"
+                                      >
+                                        {minToHHMM(m)}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </>
                             )}
