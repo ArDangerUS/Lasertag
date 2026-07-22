@@ -738,71 +738,88 @@ export default function BookingClient({
                   {dict.chooseAtLeastOne}
                 </div>
               ) : (
-                <div className="overflow-x-auto thin-scroll">
-                  <div style={{ minWidth: Math.max(360, 60 + chosenActs.length * 110) }}>
-                    <div
-                      className="grid gap-1.5"
-                      style={{ gridTemplateColumns: `48px repeat(${chosenActs.length}, 1fr)` }}
-                    >
-                      <div />
-                      {chosenActs.map((a) => (
+                (() => {
+                  const cols = `40px repeat(${chosenActs.length}, minmax(0, 1fr))`;
+                  const gap = chosenActs.length > 6 ? "gap-1" : "gap-1.5";
+                  // shrink cell text/height as more columns are added — no scroll
+                  const dense = chosenActs.length > 6;
+                  return (
+                    <div>
+                      <div className={`grid ${gap}`} style={{ gridTemplateColumns: cols }}>
+                        <div />
+                        {chosenActs.map((a) => (
+                          <div
+                            key={a.id}
+                            className="min-w-0 truncate pb-1 text-center text-[11px] font-bold text-[#555]"
+                            title={a.name}
+                          >
+                            <span className={dense ? "" : "hidden sm:inline"}>{a.icon}</span>
+                            <span className={dense ? "hidden" : "hidden sm:inline"}> </span>
+                            <span className={dense ? "hidden md:inline" : ""}>
+                              {a.name.length > 10 ? a.name.slice(0, 9) + "…" : a.name}
+                            </span>
+                            <span className={dense ? "md:hidden" : "sm:hidden"}>{a.icon}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {slots.map((m, ri) => (
                         <div
-                          key={a.id}
-                          className="truncate pb-1 text-center text-[12px] font-bold text-[#555]"
-                          title={a.name}
+                          key={m}
+                          className={`mb-1.5 grid ${gap}`}
+                          style={{ gridTemplateColumns: cols }}
                         >
-                          {a.icon} {a.name.length > 12 ? a.name.slice(0, 11) + "…" : a.name}
+                          <div
+                            className={`flex items-center ${
+                              ri % 2 === 0
+                                ? "text-[12px] font-bold text-brand-ink"
+                                : "text-[10px] font-semibold text-[#999]"
+                            }`}
+                          >
+                            {minToHHMM(m)}
+                          </div>
+                          {chosenActs.map((a) => {
+                            const st = slotStatus(a, m);
+                            const dur = actDuration(a);
+                            if (st === "selected")
+                              return (
+                                <button
+                                  key={a.id}
+                                  onClick={() => togglePick(a.id, m)}
+                                  className={`min-w-0 rounded-lg font-bold text-brand-ink2 ${
+                                    dense ? "min-h-[30px] text-[9px]" : "min-h-[34px] text-[11px]"
+                                  }`}
+                                  style={{ background: G, border: `1px solid ${G}` }}
+                                >
+                                  <span className={dense ? "hidden xl:inline" : ""}>
+                                    {minToHHMM(m)}–{minToHHMM(m + dur)}
+                                  </span>
+                                  <span className={dense ? "xl:hidden" : "hidden"}>✓</span>
+                                </button>
+                              );
+                            if (st === "free")
+                              return (
+                                <button
+                                  key={a.id}
+                                  onClick={() => togglePick(a.id, m)}
+                                  className={`min-w-0 rounded-lg border border-[#E5E5E5] bg-white hover:border-[#56EF02] ${
+                                    dense ? "min-h-[30px]" : "min-h-[34px]"
+                                  }`}
+                                />
+                              );
+                            return (
+                              <div
+                                key={a.id}
+                                className={`min-w-0 rounded-lg border border-[#f0f0f0] bg-[#f0f0f0] ${
+                                  dense ? "min-h-[30px]" : "min-h-[34px]"
+                                }`}
+                              />
+                            );
+                          })}
                         </div>
                       ))}
                     </div>
-                    {slots.map((m, ri) => (
-                      <div
-                        key={m}
-                        className="mb-1.5 grid gap-1.5"
-                        style={{ gridTemplateColumns: `48px repeat(${chosenActs.length}, 1fr)` }}
-                      >
-                        <div
-                          className={`flex items-center ${
-                            ri % 2 === 0
-                              ? "text-[13px] font-bold text-brand-ink"
-                              : "text-[11px] font-semibold text-[#999]"
-                          }`}
-                        >
-                          {minToHHMM(m)}
-                        </div>
-                        {chosenActs.map((a) => {
-                          const st = slotStatus(a, m);
-                          const dur = actDuration(a);
-                          if (st === "selected")
-                            return (
-                              <button
-                                key={a.id}
-                                onClick={() => togglePick(a.id, m)}
-                                className="min-h-[34px] rounded-lg text-[11px] font-bold text-brand-ink2"
-                                style={{ background: G, border: `1px solid ${G}` }}
-                              >
-                                {minToHHMM(m)}–{minToHHMM(m + dur)}
-                              </button>
-                            );
-                          if (st === "free")
-                            return (
-                              <button
-                                key={a.id}
-                                onClick={() => togglePick(a.id, m)}
-                                className="min-h-[34px] rounded-lg border border-[#E5E5E5] bg-white hover:border-[#56EF02]"
-                              />
-                            );
-                          return (
-                            <div
-                              key={a.id}
-                              className="min-h-[34px] rounded-lg border border-[#f0f0f0] bg-[#f0f0f0]"
-                            />
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                  );
+                })()
               )}
             </section>
 
