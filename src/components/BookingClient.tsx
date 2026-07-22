@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import type { PublicCatalog, PubActivity } from "@/lib/public-catalog";
 import type { Dict } from "@/lib/i18n";
@@ -272,39 +273,54 @@ export default function BookingClient({
   return (
     <div style={{ minHeight: "100vh", background: "#f2f2f2" }}>
       {/* Header */}
-      <header className="flex flex-wrap items-center gap-6 border-b border-[#e8e8e8] bg-white px-5 py-3.5 md:px-10">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#56EF02] text-xl font-extrabold text-brand-green">
-            G
-          </div>
-          <div>
-            <div className="text-base font-bold text-brand-green">{dict.brandName}</div>
-            <div className="text-xs text-[#777]">{dict.brandSub}</div>
-          </div>
-        </div>
+      <header className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-[#e8e8e8] bg-white px-5 py-3 md:px-10">
+        {/* Logo → back to the start screen (regular lasertag) */}
+        <Link href="/" aria-label={dict.brandName} className="shrink-0">
+          <G75Logo />
+        </Link>
 
-        <div className="ml-auto flex flex-wrap items-center gap-4">
-          <div className="text-right">
-            <div className="text-[13px] text-[#777]">{dict.bookByPhone}</div>
-            <a href={`tel:${phone}`} className="text-base font-bold text-brand-ink">
+        {/* Brand + messengers + phone */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <div className="text-[17px] font-bold leading-tight text-brand-green">
+            {dict.brandName}
+          </div>
+          <div className="flex items-center gap-2">
+            {/* TODO: replace "#" with the real Telegram channel link */}
+            <a
+              href="#"
+              aria-label="Telegram"
+              title="Telegram"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-[#229ED9] text-white transition hover:opacity-90"
+            >
+              <TelegramGlyph />
+            </a>
+            {/* TODO: replace "#" with the real Viber link */}
+            <a
+              href="#"
+              aria-label="Viber"
+              title="Viber"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-[#7360F2] text-white transition hover:opacity-90"
+            >
+              <ViberGlyph />
+            </a>
+            <a href={`tel:${phone}`} className="text-[15px] font-bold text-brand-ink">
               {phone}
             </a>
           </div>
-          <div className="flex items-center gap-2">
-            <a
-              href={viberUrl}
-              className="rounded-full bg-[#7360f2] px-3 py-2 text-xs font-bold text-white hover:opacity-90"
-            >
-              {dict.viber}
-            </a>
-            <a
-              href={telegramUrl}
-              className="rounded-full bg-[#2aabee] px-3 py-2 text-xs font-bold text-white hover:opacity-90"
-            >
-              {dict.telegram}
-            </a>
-          </div>
-          <LangSwitcher locale={locale} />
+        </div>
+
+        {/* Language dropdown + primary CTA */}
+        <div className="ml-auto flex items-center gap-3">
+          <LangDropdown locale={locale} />
+          <button
+            onClick={() =>
+              document.getElementById("bk-summary")?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
+            className="rounded-full px-5 py-2.5 text-[14px] font-bold text-brand-ink2"
+            style={{ background: G }}
+          >
+            {dict.book}
+          </button>
         </div>
       </header>
 
@@ -615,7 +631,7 @@ export default function BookingClient({
           </div>
 
           {/* Summary */}
-          <aside className="rounded-card bg-brand-ink p-6 text-white lg:sticky lg:top-6">
+          <aside id="bk-summary" className="scroll-mt-4 rounded-card bg-brand-ink p-6 text-white lg:sticky lg:top-6">
             {result ? (
               <div className="py-6 text-center">
                 <div
@@ -791,21 +807,83 @@ function CartRow({
   );
 }
 
-function LangSwitcher({ locale }: { locale: Locale }) {
-  const langs: Locale[] = ["uk", "ru", "en"];
+// G-75 target-style emblem. Links home; approximates the club's logo.
+function G75Logo() {
   return (
-    <div className="flex items-center gap-1 rounded-full border border-[#e8e8e8] p-0.5">
-      {langs.map((l) => (
-        <a
-          key={l}
-          href={`/?lang=${l}`}
-          className={`rounded-full px-2.5 py-1 text-[12px] font-bold uppercase ${
-            l === locale ? "bg-brand-ink text-[#56EF02]" : "text-[#777]"
-          }`}
-        >
-          {l}
-        </a>
-      ))}
+    <svg width="46" height="46" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+      <circle cx="24" cy="24" r="21" stroke="#139600" strokeWidth="2" />
+      <circle cx="24" cy="24" r="15" stroke="#56EF02" strokeWidth="1.5" opacity="0.7" />
+      {/* crosshair ticks */}
+      <g stroke="#139600" strokeWidth="2" strokeLinecap="round">
+        <line x1="24" y1="1" x2="24" y2="7" />
+        <line x1="24" y1="41" x2="24" y2="47" />
+        <line x1="1" y1="24" x2="7" y2="24" />
+        <line x1="41" y1="24" x2="47" y2="24" />
+      </g>
+      {/* central triangle "A" mark */}
+      <path d="M24 12 L33 32 H27.5 L24 23 L20.5 32 H15 Z" fill="#139600" />
+      <text x="24" y="40" textAnchor="middle" fontSize="6" fontWeight="800" fill="#139600" fontFamily="Open Sans, sans-serif">
+        TAG
+      </text>
+    </svg>
+  );
+}
+
+function TelegramGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M21.94 4.9 3.6 11.98c-1.05.42-1.04 1.02-.18 1.28l4.6 1.44 1.77 5.55c.22.6.4.83.83.83.33 0 .5-.15.7-.35l2.2-2.14 4.58 3.38c.84.46 1.44.22 1.65-.78l2.98-14.05c.3-1.22-.46-1.77-1.26-1.4Z" />
+    </svg>
+  );
+}
+
+function ViberGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 3C7.9 3 4.5 5.7 4.5 9.4c0 1.7.7 3.2 1.9 4.4-.1 1-.5 2.2-.9 2.9-.2.3 0 .7.4.6 1.5-.4 2.6-1 3.3-1.5.9.3 1.8.4 2.8.4 4.1 0 7.5-2.7 7.5-6.4C19 5.7 15.6 3 12 3Zm0 11.4c-.9 0-1.8-.1-2.6-.4l-.4-.2-.4.3c-.5.3-1.1.7-1.9 1 .3-.6.5-1.3.6-1.9l.1-.5-.4-.4c-1-1-1.6-2.2-1.6-3.5 0-2.9 2.8-5.2 6.1-5.2s6.1 2.3 6.1 5.2-2.7 5.2-6.1 5.2Zm3.3-3.6c-.2-.1-1-.5-1.2-.6-.2-.1-.3-.1-.4.1l-.5.6c-.1.1-.2.1-.4 0-.7-.3-1.3-.7-1.8-1.5-.1-.2 0-.3.1-.4l.3-.4c.1-.1 0-.3 0-.4l-.5-1.1c-.1-.3-.3-.3-.4-.3h-.3c-.1 0-.3 0-.5.2-.2.2-.6.6-.6 1.4s.6 1.6.7 1.7c.1.1 1.2 1.9 3 2.6 1.1.4 1.5.5 2 .4.3-.1 1-.4 1.1-.8.1-.4.1-.7.1-.8-.1-.1-.2-.1-.4-.2Z" />
+    </svg>
+  );
+}
+
+function LangDropdown({ locale }: { locale: Locale }) {
+  const [open, setOpen] = useState(false);
+  const langs: { code: Locale; label: string }[] = [
+    { code: "uk", label: "Українська" },
+    { code: "ru", label: "Русский" },
+    { code: "en", label: "English" },
+  ];
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [open]);
+
+  return (
+    <div className="relative" onClick={(e) => e.stopPropagation()}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 rounded-full border border-[#e8e8e8] px-3 py-2 text-[13px] font-bold text-brand-ink hover:border-[#cfcfcf]"
+      >
+        {locale.toUpperCase()}
+        <span className={`text-[10px] text-[#999] transition ${open ? "rotate-180" : ""}`}>▾</span>
+      </button>
+      {open && (
+        <div className="absolute right-0 z-30 mt-2 w-40 overflow-hidden rounded-xl border border-[#eee] bg-white py-1 shadow-lg">
+          {langs.map((l) => (
+            <a
+              key={l.code}
+              href={`/?lang=${l.code}`}
+              className={`flex items-center justify-between px-3.5 py-2 text-[13px] hover:bg-[#f5f5f5] ${
+                l.code === locale ? "font-bold text-brand-green" : "text-brand-ink"
+              }`}
+            >
+              <span>{l.label}</span>
+              <span className="text-[11px] font-bold uppercase text-[#999]">{l.code}</span>
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
