@@ -309,18 +309,9 @@ export default function BookingClient({
           </div>
         </div>
 
-        {/* Language dropdown + primary CTA */}
+        {/* Language dropdown */}
         <div className="ml-auto flex items-center gap-3">
           <LangDropdown locale={locale} />
-          <button
-            onClick={() =>
-              document.getElementById("bk-summary")?.scrollIntoView({ behavior: "smooth", block: "start" })
-            }
-            className="rounded-full px-5 py-2.5 text-[14px] font-bold text-brand-ink2"
-            style={{ background: G }}
-          >
-            {dict.book}
-          </button>
         </div>
       </header>
 
