@@ -122,6 +122,7 @@ async function main() {
           activityId: actByKey[it.key],
           durationMin: it.durationMin,
           order: it.order,
+          parallel: it.parallel ?? false,
         },
       });
     }

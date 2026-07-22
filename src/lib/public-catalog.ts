@@ -51,7 +51,7 @@ export type PubLocation = {
 
 export type PubAddon = { id: string; name: string; sub: string; price: number };
 
-export type PubPackageItem = { activityId: string; durationMin: number; order: number };
+export type PubPackageItem = { activityId: string; durationMin: number; order: number; parallel: boolean };
 export type PubPackage = {
   id: string;
   locationId: string | null;
@@ -144,6 +144,7 @@ export async function loadPublicCatalog(locale: Locale): Promise<PublicCatalog> 
         activityId: i.activityId,
         durationMin: i.durationMin,
         order: i.order,
+        parallel: i.parallel,
       })),
     })),
   };

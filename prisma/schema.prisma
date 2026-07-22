@@ -155,6 +155,9 @@ model PackageItem {
   activityId  String
   durationMin Int      @default(60)
   order       Int      @default(0) // booking sequence order (quest→lasertag→…→banquet)
+  // true = reserved in parallel for the whole event (e.g. banquet "на період
+  // святкування"); false = a normal slot placed consecutively in the sequence.
+  parallel    Boolean  @default(false)
 }
 
 // ---------------------------------------------------------------------------

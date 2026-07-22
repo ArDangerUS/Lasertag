@@ -313,7 +313,7 @@ export const ADDONS = [
 // show → …); room items (banquet) are reserved in parallel for the whole event.
 // `perksUk` is the full display bullet list (one perk per line), including
 // non-bookable inclusions (host, gifts, piñata, cake take-out).
-export type SeedPackageItem = { key: string; durationMin: number; order: number };
+export type SeedPackageItem = { key: string; durationMin: number; order: number; parallel?: boolean };
 export type SeedPackage = {
   locationSlug: string;
   key: string;
@@ -362,7 +362,7 @@ export const PACKAGES: SeedPackage[] = [
       { key: "quest", durationMin: 60, order: O.quest },
       { key: "scenario", durationMin: 60, order: O.scenario },
       { key: "papershow", durationMin: 30, order: O.papershow },
-      { key: "banquet", durationMin: 210, order: O.banquet },
+      { key: "banquet", durationMin: 210, order: O.banquet, parallel: true },
     ],
   },
 
@@ -375,7 +375,7 @@ export const PACKAGES: SeedPackage[] = [
     items: [
       { key: "quest", durationMin: 60, order: O.quest },
       { key: "laser", durationMin: 60, order: O.laser },
-      { key: "banquet", durationMin: 180, order: O.banquet },
+      { key: "banquet", durationMin: 180, order: O.banquet, parallel: true },
     ],
   },
   {
@@ -388,7 +388,7 @@ export const PACKAGES: SeedPackage[] = [
       { key: "laser", durationMin: 30, order: O.laser },
       { key: "papershow", durationMin: 30, order: O.papershow },
       { key: "puzzles", durationMin: 30, order: O.puzzles },
-      { key: "banquet", durationMin: 210, order: O.banquet },
+      { key: "banquet", durationMin: 210, order: O.banquet, parallel: true },
     ],
   },
   {
@@ -404,7 +404,7 @@ export const PACKAGES: SeedPackage[] = [
       { key: "squid", durationMin: 30, order: O.squid },
       { key: "puzzles", durationMin: 30, order: O.puzzles },
       { key: "neotrek", durationMin: 30, order: O.neotrek },
-      { key: "banquet", durationMin: 330, order: O.banquet },
+      { key: "banquet", durationMin: 330, order: O.banquet, parallel: true },
     ],
   },
 
@@ -435,7 +435,7 @@ export const PACKAGES: SeedPackage[] = [
       { key: "quest", durationMin: 60, order: O.quest },
       { key: "scenario", durationMin: 60, order: O.scenario },
       { key: "papershow", durationMin: 60, order: O.papershow },
-      { key: "banquet", durationMin: 210, order: O.banquet },
+      { key: "banquet", durationMin: 210, order: O.banquet, parallel: true },
     ],
   },
 
@@ -466,7 +466,7 @@ export const PACKAGES: SeedPackage[] = [
       { key: "quest", durationMin: 60, order: O.quest },
       { key: "scenario", durationMin: 60, order: O.scenario },
       { key: "papershow", durationMin: 30, order: O.papershow },
-      { key: "banquet", durationMin: 210, order: O.banquet },
+      { key: "banquet", durationMin: 210, order: O.banquet, parallel: true },
     ],
   },
 ];

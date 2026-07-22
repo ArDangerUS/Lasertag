@@ -22,7 +22,7 @@ type Props = {
 };
 
 const G = "#56EF02";
-const PERK_LIMIT = 4; // perks shown before "показати все"
+const PERK_LIMIT = 5; // perks shown before "показати все"
 
 export default function BookingClient({
   catalog,
@@ -85,6 +85,7 @@ export default function BookingClient({
     // packages are location-specific — reset selection when location changes
     setPkgOpenId(null);
     setPkgBooking(null);
+    setExpandedPerks({}); // always collapse details when returning to a location
   }, [locationId, locActivities]);
 
   // Packages offered at the current location.
@@ -99,8 +100,10 @@ export default function BookingClient({
   const expandPackage = useCallback(
     (pkg: PublicCatalog["packages"][number], startMin: number) => {
       const sorted = [...pkg.items].sort((a, b) => a.order - b.order);
-      const seq = sorted.filter((i) => actById.get(i.activityId)?.category !== "room");
-      const rooms = sorted.filter((i) => actById.get(i.activityId)?.category === "room");
+      // Sequential items run back-to-back in order; parallel items (whole-event
+      // banquet) are reserved from the start for their full duration.
+      const seq = sorted.filter((i) => !i.parallel);
+      const parallelItems = sorted.filter((i) => i.parallel);
       const out: { activityId: string; startMin: number; durationMin: number; title: string }[] = [];
       let cursor = startMin;
       for (const it of seq) {
@@ -108,7 +111,7 @@ export default function BookingClient({
         out.push({ activityId: it.activityId, startMin: cursor, durationMin: it.durationMin, title: a?.name ?? "" });
         cursor += it.durationMin;
       }
-      for (const it of rooms) {
+      for (const it of parallelItems) {
         const a = actById.get(it.activityId);
         out.push({ activityId: it.activityId, startMin, durationMin: it.durationMin, title: a?.name ?? "" });
       }
@@ -400,7 +403,6 @@ export default function BookingClient({
           </Link>
           <div className="leading-tight">
             <div className="text-[17px] font-bold text-brand-green">{dict.brandName}</div>
-            <div className="text-[12px] text-[#777]">{dict.brandSub}</div>
           </div>
         </div>
 
@@ -443,13 +445,7 @@ export default function BookingClient({
         {/* Step 1 */}
         <div className="grid grid-cols-1 gap-6 rounded-card bg-white p-6 shadow-card md:grid-cols-4">
           <Field n={1} label={dict.stepDate} badge={weekend ? dict.weekendBadge : undefined}>
-            <input
-              type="date"
-              value={date}
-              min={today}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full rounded-xl border border-[#E5E5E5] px-3.5 py-3 text-[15px]"
-            />
+            <DatePicker value={date} min={today} onChange={setDate} locale={locale} />
           </Field>
           <Field n={2} label={dict.stepLocation}>
             <select
@@ -515,11 +511,22 @@ export default function BookingClient({
                     const overCap = people > p.maxPeople;
                     const perksExpanded = !!expandedPerks[p.id];
                     const shownPerks = perksExpanded ? p.perks : p.perks.slice(0, PERK_LIMIT);
-                    // all 30-min starts; unavailable ones are shown greyed-out
+                    // 30-min starts, trimmed so the grid ends at the last bookable
+                    // hour-row (no trailing rows that are entirely unavailable).
+                    let lastFit = -1;
+                    if (open && !overCap) {
+                      for (let m = location.openMin; m < location.closeMin; m += SLOT_STEP_MIN) {
+                        if (packageFits(p, m)) lastFit = m;
+                      }
+                    }
+                    const lastHour = Math.floor(lastFit / 60);
                     const allStarts: number[] = [];
-                    for (let m = location.openMin; m < location.closeMin; m += SLOT_STEP_MIN)
-                      allStarts.push(m);
-                    const anyFits = open && !overCap && allStarts.some((m) => packageFits(p, m));
+                    if (lastFit >= 0) {
+                      for (let m = location.openMin; m < location.closeMin; m += SLOT_STEP_MIN) {
+                        if (Math.floor(m / 60) <= lastHour) allStarts.push(m);
+                      }
+                    }
+                    const anyFits = lastFit >= 0;
                     return (
                       <div
                         key={p.id}
@@ -1070,6 +1077,153 @@ function ViberGlyph() {
     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path d="M12 3C7.9 3 4.5 5.7 4.5 9.4c0 1.7.7 3.2 1.9 4.4-.1 1-.5 2.2-.9 2.9-.2.3 0 .7.4.6 1.5-.4 2.6-1 3.3-1.5.9.3 1.8.4 2.8.4 4.1 0 7.5-2.7 7.5-6.4C19 5.7 15.6 3 12 3Zm0 11.4c-.9 0-1.8-.1-2.6-.4l-.4-.2-.4.3c-.5.3-1.1.7-1.9 1 .3-.6.5-1.3.6-1.9l.1-.5-.4-.4c-1-1-1.6-2.2-1.6-3.5 0-2.9 2.8-5.2 6.1-5.2s6.1 2.3 6.1 5.2-2.7 5.2-6.1 5.2Zm3.3-3.6c-.2-.1-1-.5-1.2-.6-.2-.1-.3-.1-.4.1l-.5.6c-.1.1-.2.1-.4 0-.7-.3-1.3-.7-1.8-1.5-.1-.2 0-.3.1-.4l.3-.4c.1-.1 0-.3 0-.4l-.5-1.1c-.1-.3-.3-.3-.4-.3h-.3c-.1 0-.3 0-.5.2-.2.2-.6.6-.6 1.4s.6 1.6.7 1.7c.1.1 1.2 1.9 3 2.6 1.1.4 1.5.5 2 .4.3-.1 1-.4 1.1-.8.1-.4.1-.7.1-.8-.1-.1-.2-.1-.4-.2Z" />
     </svg>
+  );
+}
+
+// Monday-first date picker (native inputs can't force week start). Marks
+// weekends, blocks past dates, localised month/weekday labels.
+const DP_WEEKDAYS: Record<Locale, string[]> = {
+  uk: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"],
+  ru: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
+  en: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
+};
+const DP_MONTHS: Record<Locale, string[]> = {
+  uk: ["Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень", "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень"],
+  ru: ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"],
+  en: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+};
+
+function DatePicker({
+  value,
+  min,
+  onChange,
+  locale,
+}: {
+  value: string;
+  min: string;
+  onChange: (iso: string) => void;
+  locale: Locale;
+}) {
+  const [open, setOpen] = useState(false);
+  const parse = (iso: string) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    return { y, m: m - 1, d };
+  };
+  const sel = parse(value);
+  const [view, setView] = useState({ y: sel.y, m: sel.m });
+
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [open]);
+
+  const iso = (y: number, m: number, d: number) =>
+    `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const label = `${String(sel.d).padStart(2, "0")}.${String(sel.m + 1).padStart(2, "0")}.${sel.y}`;
+
+  const firstIdx = (new Date(view.y, view.m, 1).getDay() + 6) % 7; // Monday = 0
+  const daysInMonth = new Date(view.y, view.m + 1, 0).getDate();
+  const cells: (number | null)[] = [
+    ...Array(firstIdx).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  const minAtMonthStart = iso(view.y, view.m, 1) < min && `${view.y}-${String(view.m + 1).padStart(2, "0")}` <= min.slice(0, 7);
+
+  const shift = (delta: number) =>
+    setView((v) => {
+      const m = v.m + delta;
+      if (m < 0) return { y: v.y - 1, m: 11 };
+      if (m > 11) return { y: v.y + 1, m: 0 };
+      return { y: v.y, m };
+    });
+
+  return (
+    <div className="relative" onClick={(e) => e.stopPropagation()}>
+      <button
+        onClick={() => {
+          setView({ y: sel.y, m: sel.m });
+          setOpen((o) => !o);
+        }}
+        className="flex w-full items-center justify-between rounded-xl border border-[#E5E5E5] bg-white px-3.5 py-3 text-left text-[15px] text-brand-ink"
+      >
+        {label}
+        <span className="text-[#999]">📅</span>
+      </button>
+      {open && (
+        <div className="absolute left-0 z-40 mt-2 w-[290px] rounded-2xl border border-[#eee] bg-white p-3 shadow-xl">
+          <div className="mb-2 flex items-center justify-between">
+            <button
+              onClick={() => shift(-1)}
+              disabled={!!minAtMonthStart}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-[#555] hover:bg-[#f2f2f2] disabled:opacity-30"
+            >
+              ‹
+            </button>
+            <div className="text-[14px] font-bold text-brand-ink">
+              {DP_MONTHS[locale][view.m]} {view.y}
+            </div>
+            <button
+              onClick={() => shift(1)}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-[#555] hover:bg-[#f2f2f2]"
+            >
+              ›
+            </button>
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {DP_WEEKDAYS[locale].map((w, i) => (
+              <div
+                key={w}
+                className={`py-1 text-center text-[11px] font-bold ${i >= 5 ? "text-[#e0791b]" : "text-[#999]"}`}
+              >
+                {w}
+              </div>
+            ))}
+            {cells.map((d, i) => {
+              if (d === null) return <div key={`e${i}`} />;
+              const dayIso = iso(view.y, view.m, d);
+              const disabled = dayIso < min;
+              const selected = dayIso === value;
+              const isWeekend = i % 7 >= 5;
+              return (
+                <button
+                  key={d}
+                  disabled={disabled}
+                  onClick={() => {
+                    onChange(dayIso);
+                    setOpen(false);
+                  }}
+                  className={`h-9 rounded-lg text-[13px] font-semibold transition ${
+                    selected
+                      ? "bg-brand-lime text-brand-ink2"
+                      : disabled
+                        ? "text-[#d0d0d0]"
+                        : isWeekend
+                          ? "text-[#e0791b] hover:bg-[#fdf3e3]"
+                          : "text-brand-ink hover:bg-[#f2f2f2]"
+                  }`}
+                >
+                  {d}
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-2 flex justify-end border-t border-[#f0f0f0] pt-2">
+            <button
+              onClick={() => {
+                onChange(min);
+                setView(parse(min));
+                setOpen(false);
+              }}
+              className="text-[12px] font-semibold text-brand-green"
+            >
+              {locale === "ru" ? "Сегодня" : locale === "en" ? "Today" : "Сьогодні"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
