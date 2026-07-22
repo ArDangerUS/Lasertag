@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { resolvePrice, makeCode, usesWeekendRate } from "./pricing";
+import { resolvePrice, makeCode, usesWeekendRate, lasertagMorningDiscount } from "./pricing";
 import { audit } from "./audit";
 import type { SessionUser } from "./auth";
 import { z } from "zod";
@@ -73,6 +73,14 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
         date: input.date,
       });
       unit = resolved ?? 0;
+      // Weekday-morning lasertag discount (mirrors the client).
+      const factor = lasertagMorningDiscount({
+        activityKey: act.key,
+        locationSlug: location.slug,
+        date: input.date,
+        startMin: it.startMin,
+      });
+      unit = Math.round(unit * factor);
     }
     const price = it.price != null ? it.price : act.perPerson ? unit * it.people : unit;
     return {

@@ -112,12 +112,11 @@ export const ACTIVITIES: SeedActivity[] = [
     maxPeople: 30,
     sortOrder: 1,
     locations: ALL,
+    // Same lasertag prices for all locations. (10-min tariff 180/200 also exists
+    // but the calendar offers 30/60; can be added later if needed.)
     prices: [
-      { durationMin: 30, weekday: 500, weekend: 600 },
-      { durationMin: 60, weekday: 800, weekend: 900 },
-      // Gorodok — трохи інші ціни
-      { locationSlug: "gorodok", durationMin: 30, weekday: 550, weekend: 650 },
-      { locationSlug: "gorodok", durationMin: 60, weekday: 850, weekend: 950 },
+      { durationMin: 30, weekday: 400, weekend: 500 },
+      { durationMin: 60, weekday: 700, weekend: 800 },
     ],
   },
   {
@@ -136,8 +135,9 @@ export const ACTIVITIES: SeedActivity[] = [
     minPeople: 6,
     maxPeople: 20,
     sortOrder: 2,
-    locations: ALL,
-    prices: [{ weekday: 1000, weekend: 1100 }],
+    // Only at Нивки and Городок.
+    locations: ["nyvky", "gorodok"],
+    prices: [{ weekday: 950, weekend: 1000 }],
   },
   {
     key: "quest",
@@ -156,10 +156,7 @@ export const ACTIVITIES: SeedActivity[] = [
     maxPeople: 10,
     sortOrder: 3,
     locations: ALL,
-    prices: [
-      { weekday: 5000, weekend: 5000 },
-      { locationSlug: "gorodok", weekday: 5500, weekend: 5500 },
-    ],
+    prices: [{ weekday: 4000, weekend: 5000 }],
   },
   {
     key: "papershow",
@@ -186,9 +183,12 @@ export const ACTIVITIES: SeedActivity[] = [
     nameUk: "Лабіринт «Хранитель Тіней»",
     nameRu: "Лабиринт «Хранитель Теней»",
     nameEn: "Maze “Shadow Keeper”",
-    descUk: "до 10 осіб · темний лабіринт",
-    descRu: "до 10 человек · тёмный лабиринт",
-    descEn: "up to 10 people · dark maze",
+    descUk:
+      "Діти мають знайти всі промені світла та ключі, але Хранитель не хоче віддавати свої скарби та блукає лабіринтом у пошуках тих, кого можна «залякати» та вибити з гри.",
+    descRu:
+      "Дети должны найти все лучи света и ключи, но Хранитель не хочет отдавать свои сокровища и бродит по лабиринту в поисках тех, кого можно «напугать» и выбить из игры.",
+    descEn:
+      "Kids must find all the light beams and keys, but the Keeper won't give up its treasures and roams the maze looking for someone to scare out of the game.",
     icon: "🌀",
     perPerson: false,
     durationMin: 60,
@@ -196,7 +196,8 @@ export const ACTIVITIES: SeedActivity[] = [
     minPeople: 1,
     maxPeople: 10,
     sortOrder: 5,
-    locations: ["gorodok"],
+    // Доступний на всіх локаціях.
+    locations: ALL,
     prices: [{ weekday: 6000, weekend: 6000 }],
   },
   {
@@ -268,12 +269,16 @@ export const ACTIVITIES: SeedActivity[] = [
     icon: "🍰",
     perPerson: false,
     durationMin: 60,
+    durationOptions: [30, 60], // можна обирати 30 або 60 хв
     cleanupMin: 0,
     minPeople: 1,
     maxPeople: 30,
     sortOrder: 8,
     locations: ALL,
-    prices: [{ weekday: 1000, weekend: 1000 }],
+    prices: [
+      { durationMin: 30, weekday: 500, weekend: 500 },
+      { durationMin: 60, weekday: 1000, weekend: 1000 },
+    ],
   },
   {
     key: "mobile-laser",
@@ -297,8 +302,8 @@ export const ACTIVITIES: SeedActivity[] = [
 ];
 
 export const ADDONS = [
-  { key: "pinata", nameUk: "Піньята-сюрприз", nameRu: "Пиньята-сюрприз", nameEn: "Piñata surprise", subUk: "1 кг цукерок, тематика з локації", subRu: "1 кг конфет, тематика локации", subEn: "1 kg of sweets, themed", price: 1200, sortOrder: 1 },
-  { key: "pinata-custom", nameUk: "Піньята під замовлення", nameRu: "Пиньята под заказ", nameEn: "Custom piñata", subUk: "індивідуальна тематика", subRu: "индивидуальная тематика", subEn: "custom theme", price: 1400, sortOrder: 2 },
+  { key: "pinata", nameUk: "Піньята-сюрприз", nameRu: "Пиньята-сюрприз", nameEn: "Piñata surprise", subUk: "1 кг цукерок, тематика на вибір з локації", subRu: "1 кг конфет, тематика на выбор из локации", subEn: "1 kg of sweets, theme of your choice", price: 1200, sortOrder: 1 },
+  { key: "pinata-custom", nameUk: "Піньята під замовлення", nameRu: "Пиньята под заказ", nameEn: "Custom piñata", subUk: "", subRu: "", subEn: "", price: 1400, sortOrder: 2 },
   { key: "pinata-own", nameUk: "Своя піньята (наповнення від нас)", nameRu: "Своя пиньята", nameEn: "Bring-your-own piñata", subUk: "без конфеті, чупа-чупсів та скляних іграшок", subRu: "без конфетти и стеклянных игрушек", subEn: "no confetti / glass toys", price: 500, sortOrder: 3 },
   { key: "animator", nameUk: "Аніматор", nameRu: "Аниматор", nameEn: "Animator", subUk: "2 години · 1 аніматор", subRu: "2 часа · 1 аниматор", subEn: "2 hours · 1 animator", price: 3000, sortOrder: 4 },
   { key: "photographer", nameUk: "Фотограф", nameRu: "Фотограф", nameEn: "Photographer", subUk: "1 година зйомки", subRu: "1 час съёмки", subEn: "1 hour session", price: 2000, sortOrder: 5 },
@@ -340,7 +345,7 @@ export const PACKAGES: SeedPackage[] = [
     locationSlug: "nyvky", key: "nyvky-stalker", icon: "🎯", maxPeople: 6,
     nameUk: "Комплекс «Сталкер»", nameRu: "Комплекс «Сталкер»", nameEn: "“Stalker” package",
     perksUk: STALKER_PERKS, weekday: 8700, weekend: 9000, sortOrder: 1,
-    items: [{ key: "scenario", durationMin: 60, order: O.scenario }],
+    items: [{ key: "laser", durationMin: 60, order: O.scenario }],
   },
   {
     locationSlug: "nyvky", key: "nyvky-gold", icon: "🥇", maxPeople: 10,
@@ -360,7 +365,7 @@ export const PACKAGES: SeedPackage[] = [
     weekday: 28500, weekend: 30000, sortOrder: 3,
     items: [
       { key: "quest", durationMin: 60, order: O.quest },
-      { key: "scenario", durationMin: 60, order: O.scenario },
+      { key: "laser", durationMin: 60, order: O.scenario },
       { key: "papershow", durationMin: 30, order: O.papershow },
       { key: "banquet", durationMin: 210, order: O.banquet, parallel: true },
     ],
@@ -413,7 +418,7 @@ export const PACKAGES: SeedPackage[] = [
     locationSlug: "new-way", key: "newway-stalker", icon: "🎯", maxPeople: 6,
     nameUk: "Комплекс «Сталкер»", nameRu: "Комплекс «Сталкер»", nameEn: "“Stalker” package",
     perksUk: STALKER_PERKS, weekday: 8700, weekend: 9000, sortOrder: 1,
-    items: [{ key: "scenario", durationMin: 60, order: O.scenario }],
+    items: [{ key: "laser", durationMin: 60, order: O.scenario }],
   },
   {
     locationSlug: "new-way", key: "newway-gold", icon: "🥇", maxPeople: 10,
@@ -433,7 +438,7 @@ export const PACKAGES: SeedPackage[] = [
     weekday: 28500, weekend: 30000, sortOrder: 3,
     items: [
       { key: "quest", durationMin: 60, order: O.quest },
-      { key: "scenario", durationMin: 60, order: O.scenario },
+      { key: "laser", durationMin: 60, order: O.scenario },
       { key: "papershow", durationMin: 60, order: O.papershow },
       { key: "banquet", durationMin: 210, order: O.banquet, parallel: true },
     ],
@@ -444,7 +449,7 @@ export const PACKAGES: SeedPackage[] = [
     locationSlug: "dream-yellow", key: "dream-stalker", icon: "🎯", maxPeople: 6,
     nameUk: "Комплекс «Сталкер»", nameRu: "Комплекс «Сталкер»", nameEn: "“Stalker” package",
     perksUk: STALKER_PERKS, weekday: 8700, weekend: 9000, sortOrder: 1,
-    items: [{ key: "scenario", durationMin: 60, order: O.scenario }],
+    items: [{ key: "laser", durationMin: 60, order: O.scenario }],
   },
   {
     locationSlug: "dream-yellow", key: "dream-gold", icon: "🥇", maxPeople: 10,
@@ -464,7 +469,7 @@ export const PACKAGES: SeedPackage[] = [
     weekday: 28500, weekend: 30000, sortOrder: 3,
     items: [
       { key: "quest", durationMin: 60, order: O.quest },
-      { key: "scenario", durationMin: 60, order: O.scenario },
+      { key: "laser", durationMin: 60, order: O.scenario },
       { key: "papershow", durationMin: 30, order: O.papershow },
       { key: "banquet", durationMin: 210, order: O.banquet, parallel: true },
     ],

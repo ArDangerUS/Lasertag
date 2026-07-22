@@ -6,7 +6,7 @@ import type { PublicCatalog, PubActivity } from "@/lib/public-catalog";
 import type { Dict } from "@/lib/i18n";
 import type { Locale } from "@/lib/constants";
 import { SLOT_STEP_MIN } from "@/lib/constants";
-import { resolvePrice, usesWeekendRate, fmtMoney, minToHHMM } from "@/lib/pricing";
+import { resolvePrice, usesWeekendRate, fmtMoney, minToHHMM, lasertagMorningDiscount } from "@/lib/pricing";
 import { confirmDeepLink } from "@/lib/telegram-links";
 
 type Pick = { activityId: string; startMin: number };
@@ -215,26 +215,42 @@ export default function BookingClient({
       return next;
     });
 
+  // All time ranges this customer has already committed to (any activity + the
+  // selected package). One group can't be in two places at once, so these block
+  // overlapping slots across every activity's column.
+  const myBusyRanges = useMemo(() => {
+    const ranges: [number, number][] = [];
+    picks.forEach((p) => {
+      const a = actById.get(p.activityId);
+      if (a) ranges.push([p.startMin, p.startMin + actDuration(a)]);
+    });
+    if (pkgBooking) {
+      const p = catalog.packages.find((x) => x.id === pkgBooking.packageId);
+      if (p) expandPackage(p, pkgBooking.startMin).forEach((it) => ranges.push([it.startMin, it.startMin + it.durationMin]));
+    }
+    return ranges;
+  }, [picks, actById, actDuration, pkgBooking, catalog.packages, expandPackage]);
+
   // Slot status for an activity's start minute.
   const slotStatus = useCallback(
     (a: PubActivity, startMin: number): "selected" | "busy" | "free" => {
       const dur = actDuration(a);
+      const end = startMin + dur;
       if (picks.some((p) => p.activityId === a.id && p.startMin === startMin)) return "selected";
-      if (startMin + dur > location.closeMin) return "busy";
+      if (end > location.closeMin) return "busy";
+      // busy if another customer already occupies any covered slot
       const b = busy[a.id] ?? [];
-      // busy if any covered slot is in the busy list
-      for (let m = startMin; m < startMin + dur; m += SLOT_STEP_MIN) {
+      for (let m = startMin; m < end; m += SLOT_STEP_MIN) {
         if (b.includes(m)) return "busy";
       }
-      // block overlap with own picks of the SAME activity
-      const mine = picks.filter((p) => p.activityId === a.id);
-      for (const p of mine) {
-        const pd = actDuration(a);
-        if (startMin < p.startMin + pd && p.startMin < startMin + dur) return "busy";
+      // block anything overlapping this customer's own bookings (all activities
+      // + package) — can't do two things at the same time
+      for (const [rs, re] of myBusyRanges) {
+        if (startMin < re && rs < end) return "busy";
       }
       return "free";
     },
-    [actDuration, picks, busy, location]
+    [actDuration, picks, busy, location, myBusyRanges]
   );
 
   const togglePick = (activityId: string, startMin: number) => {
@@ -261,6 +277,14 @@ export default function BookingClient({
         const a = actById.get(p.activityId);
         if (!a) return null;
         const dur = actDuration(a);
+        const factor = lasertagMorningDiscount({
+          activityKey: a.key,
+          locationSlug: location.slug,
+          date,
+          startMin: p.startMin,
+        });
+        const unit = Math.round(unitPrice(a) * factor);
+        const discounted = factor < 1;
         return {
           key: `${p.activityId}|${p.startMin}`,
           activityId: p.activityId,
@@ -268,10 +292,10 @@ export default function BookingClient({
           durationMin: dur,
           title: a.name,
           icon: a.icon,
-          sub: `${minToHHMM(p.startMin)}–${minToHHMM(p.startMin + dur)} · ${
-            a.perPerson ? `${people} × ${fmtMoney(unitPrice(a))}` : dict.perGroup
+          sub: `${minToHHMM(p.startMin)}–${minToHHMM(p.startMin + dur)}${discounted ? " · −40%" : ""} · ${
+            a.perPerson ? `${people} × ${fmtMoney(unit)}` : dict.perGroup
           }`,
-          price: a.perPerson ? unitPrice(a) * Math.max(1, people) : unitPrice(a),
+          price: a.perPerson ? unit * Math.max(1, people) : unit,
           people: a.perPerson ? Math.max(1, people) : Math.min(people, a.maxPeople),
         };
       })
@@ -496,8 +520,8 @@ export default function BookingClient({
         </div>
 
         {/* Main grid */}
-        <div className="mt-6 grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_360px]">
-          <div className="flex flex-col gap-6">
+        <div className="mt-6 grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="flex min-w-0 flex-col gap-6">
             {/* Packages (комплекси) — per location, booked as a sequence */}
             {locPackages.length > 0 && (
               <section className="rounded-card bg-white p-7 shadow-card">
@@ -672,10 +696,10 @@ export default function BookingClient({
                 })}
               </div>
 
-              {/* Lasertag duration toggle (if a duration-based activity chosen) */}
+              {/* Duration toggle (lasertag / banquet — both support 30/60) */}
               {chosenActs.some((a) => a.durationOptions.length > 0) && (
                 <div className="mt-4 flex items-center gap-2.5">
-                  <span className="text-[13px] text-[#555]">{dict.durationLaser}</span>
+                  <span className="text-[13px] text-[#555]">{dict.durationLabel}</span>
                   {[30, 60].map((d) => (
                     <button
                       key={d}
@@ -693,10 +717,18 @@ export default function BookingClient({
               )}
 
               {/* Availability calendar */}
-              <div className="mb-3 mt-5 flex items-center gap-2.5">
+              <div className="mb-3 mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
                 <span className="text-[12px] font-bold tracking-wider text-[#777]">
                   {dict.calendarTitle}
                 </span>
+                {/* legend at the top so it's clear before scanning the table */}
+                {chosenActs.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-4 text-[12px] text-[#888]">
+                    <Legend color="#fff" border="#E5E5E5" label={dict.legendFree} />
+                    <Legend color={G} label={dict.legendYours} />
+                    <Legend color="#f0f0f0" label={dict.legendBusy} />
+                  </div>
+                )}
                 <span className="h-px flex-1 bg-[#f0f0f0]" />
                 {loadingAvail && <span className="text-[11px] text-[#bbb]">…</span>}
               </div>
@@ -769,11 +801,6 @@ export default function BookingClient({
                         })}
                       </div>
                     ))}
-                    <div className="mt-3 flex flex-wrap gap-4 text-[12px] text-[#888]">
-                      <Legend color="#fff" border="#E5E5E5" label={dict.legendFree} />
-                      <Legend color={G} label={dict.legendYours} />
-                      <Legend color="#f0f0f0" label={dict.legendBusy} />
-                    </div>
                   </div>
                 </div>
               )}
@@ -1175,7 +1202,7 @@ function DatePicker({
             {DP_WEEKDAYS[locale].map((w, i) => (
               <div
                 key={w}
-                className={`py-1 text-center text-[11px] font-bold ${i >= 5 ? "text-[#e0791b]" : "text-[#999]"}`}
+                className={`py-1 text-center text-[11px] font-bold ${i >= 4 ? "text-[#e0791b]" : "text-[#999]"}`}
               >
                 {w}
               </div>
@@ -1185,7 +1212,7 @@ function DatePicker({
               const dayIso = iso(view.y, view.m, d);
               const disabled = dayIso < min;
               const selected = dayIso === value;
-              const isWeekend = i % 7 >= 5;
+              const isWeekend = i % 7 >= 4; // Пт, Сб, Нд — вихідний тариф
               return (
                 <button
                   key={d}

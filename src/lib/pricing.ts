@@ -3,10 +3,10 @@ import { HOLIDAY_MMDD } from "./catalog";
 // A "date" is an ISO local day string "YYYY-MM-DD".
 
 export function isWeekendDate(iso: string): boolean {
-  // Parse as local noon to avoid timezone edge cases.
+  // Weekend tariff runs Fri–Sun (ПТ, СБ, НД) per the club's pricing.
   const d = new Date(iso + "T12:00:00");
   const day = d.getDay();
-  return day === 0 || day === 6;
+  return day === 5 || day === 6 || day === 0;
 }
 
 export function isHolidayDate(iso: string): boolean {
@@ -62,6 +62,24 @@ export function resolvePrice(
 
   if (!best) return null;
   return weekend ? best.r.priceWeekend : best.r.priceWeekday;
+}
+
+// −40% on lasertag Mon–Thu, start 10:00–11:00, at every location except Gorodok.
+// Returns a multiplier (0.6 or 1). NOTE: applies to any lasertag starting in the
+// window regardless of 30/60 duration — confirm with the client if it should be
+// limited to a specific duration.
+export function lasertagMorningDiscount(opts: {
+  activityKey: string;
+  locationSlug: string;
+  date: string;
+  startMin: number;
+}): number {
+  if (opts.activityKey !== "laser") return 1;
+  if (opts.locationSlug === "gorodok") return 1;
+  const day = new Date(opts.date + "T12:00:00").getDay(); // 1..4 = Mon..Thu
+  if (day < 1 || day > 4) return 1;
+  if (opts.startMin >= 600 && opts.startMin < 660) return 0.6; // 10:00–11:00
+  return 1;
 }
 
 export function fmtMoney(n: number): string {
