@@ -98,27 +98,31 @@ async function main() {
   }
   console.log(`  ${ADDONS.length} addons`);
 
-  // ---- packages ----
+  // ---- packages (location-specific) ----
   for (const p of PACKAGES) {
     const pkg = await prisma.package.create({
       data: {
         key: p.key,
+        locationId: locBySlug[p.locationSlug],
         nameUk: p.nameUk,
         nameRu: p.nameRu,
         nameEn: p.nameEn,
-        descUk: p.descUk,
-        descRu: p.descRu,
-        descEn: p.descEn,
+        perksUk: p.perksUk,
         icon: p.icon,
-        fixedPriceWeekday: p.fixedPriceWeekday,
-        fixedPriceWeekend: p.fixedPriceWeekend,
+        maxPeople: p.maxPeople,
+        fixedPriceWeekday: p.weekday,
+        fixedPriceWeekend: p.weekend,
         sortOrder: p.sortOrder,
       },
     });
-    let order = 0;
-    for (const key of p.items) {
+    for (const it of p.items) {
       await prisma.packageItem.create({
-        data: { packageId: pkg.id, activityId: actByKey[key], order: order++ },
+        data: {
+          packageId: pkg.id,
+          activityId: actByKey[it.key],
+          durationMin: it.durationMin,
+          order: it.order,
+        },
       });
     }
   }

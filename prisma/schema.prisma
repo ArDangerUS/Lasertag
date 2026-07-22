@@ -32,6 +32,7 @@ model Location {
   active    Boolean  @default(true)
 
   activities LocationActivity[]
+  packages   Package[]
   bookings   Booking[]
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -120,15 +121,24 @@ model Addon {
 model Package {
   id        String  @id @default(cuid())
   key       String  @unique
+  // Packages are location-specific (content and prices differ per location).
+  location   Location? @relation(fields: [locationId], references: [id])
+  locationId String?
   nameUk    String
   nameRu    String  @default("")
   nameEn    String  @default("")
   descUk    String  @default("")
   descRu    String  @default("")
   descEn    String  @default("")
+  // Full display bullet list (one perk per line), including non-bookable
+  // inclusions like host, gifts, piñata, cake take-out.
+  perksUk   String  @default("")
+  perksRu   String  @default("")
+  perksEn   String  @default("")
   icon      String  @default("🎁")
   photo     String  @default("")
-  // Optional flat package price. If 0, price = sum of its items.
+  maxPeople Int     @default(10)
+  // Flat package price (weekday / weekend). If 0, price = sum of its items.
   fixedPriceWeekday Int @default(0)
   fixedPriceWeekend Int @default(0)
   sortOrder Int     @default(0)
@@ -136,13 +146,15 @@ model Package {
   items     PackageItem[]
 }
 
+// The bookable sequence of a package (only calendar-occupying activities).
 model PackageItem {
-  id         String   @id @default(cuid())
-  package    Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  packageId  String
-  activity   Activity @relation(fields: [activityId], references: [id])
-  activityId String
-  order      Int      @default(0) // sequence order in the celebration
+  id          String   @id @default(cuid())
+  package     Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  packageId   String
+  activity    Activity @relation(fields: [activityId], references: [id])
+  activityId  String
+  durationMin Int      @default(60)
+  order       Int      @default(0) // booking sequence order (quest→lasertag→…→banquet)
 }
 
 // ---------------------------------------------------------------------------

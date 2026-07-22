@@ -238,6 +238,25 @@ export const ACTIVITIES: SeedActivity[] = [
     prices: [{ weekday: 600, weekend: 700 }],
   },
   {
+    key: "puzzles",
+    category: "game",
+    nameUk: "Пазли",
+    nameRu: "Пазлы",
+    nameEn: "Puzzles",
+    descUk: "інтерактивні пазли",
+    descRu: "интерактивные пазлы",
+    descEn: "interactive puzzles",
+    icon: "🧩",
+    perPerson: true,
+    durationMin: 30,
+    cleanupMin: 0,
+    minPeople: 1,
+    maxPeople: 15,
+    sortOrder: 7,
+    locations: ["gorodok"],
+    prices: [{ weekday: 300, weekend: 350 }],
+  },
+  {
     key: "banquet",
     category: "room",
     nameUk: "Бенкетна кімната",
@@ -288,36 +307,167 @@ export const ADDONS = [
   { key: "arena", nameUk: "Індивідуальне закриття арени", nameRu: "Индивидуальное закрытие арены", nameEn: "Private arena", subUk: "лазертаг тільки для вас, 1 год", subRu: "лазертаг только для вас, 1 час", subEn: "lasertag just for you, 1h", price: 14000, sortOrder: 8 },
 ];
 
-// Complex offers. Booked in the client's recommended sequence:
-// quest → lasertag → paper show → banquet.
-export const PACKAGES = [
+// Complex offers ("комплекси"). Location-specific — content and prices differ.
+// `items` is the bookable sequence placed on the calendar. Non-room items run
+// consecutively in the client's recommended order (quest → lasertag → paper
+// show → …); room items (banquet) are reserved in parallel for the whole event.
+// `perksUk` is the full display bullet list (one perk per line), including
+// non-bookable inclusions (host, gifts, piñata, cake take-out).
+export type SeedPackageItem = { key: string; durationMin: number; order: number };
+export type SeedPackage = {
+  locationSlug: string;
+  key: string;
+  nameUk: string;
+  nameRu: string;
+  nameEn: string;
+  perksUk: string;
+  icon: string;
+  maxPeople: number;
+  weekday: number;
+  weekend: number;
+  sortOrder: number;
+  items: SeedPackageItem[];
+};
+
+// canonical order weights for the booking sequence
+const O = { quest: 10, scenario: 20, laser: 20, papershow: 30, maze: 40, squid: 50, puzzles: 60, neotrek: 70, banquet: 99 };
+
+const STALKER_PERKS = "60 хвилин – Лазертаг «Сталкер»\nФірмові подарунки**\nВедучий програми\nДо 6 учасників";
+
+export const PACKAGES: SeedPackage[] = [
+  // ---------- Нивки ----------
   {
-    key: "stalker",
-    nameUk: "Комплекс «Сталкер»",
-    nameRu: "Комплекс «Сталкер»",
-    nameEn: "“Stalker” package",
-    descUk: "Квест + Лазертаг + Бенкетна кімната — у правильній послідовності свята",
-    descRu: "Квест + Лазертаг + Банкетная комната",
-    descEn: "Quest + Lasertag + Banquet room, in the ideal party order",
-    icon: "🎁",
-    fixedPriceWeekday: 0, // 0 => сума позицій
-    fixedPriceWeekend: 0,
-    sortOrder: 1,
-    items: ["quest", "laser", "banquet"],
+    locationSlug: "nyvky", key: "nyvky-stalker", icon: "🎯", maxPeople: 6,
+    nameUk: "Комплекс «Сталкер»", nameRu: "Комплекс «Сталкер»", nameEn: "“Stalker” package",
+    perksUk: STALKER_PERKS, weekday: 8700, weekend: 9000, sortOrder: 1,
+    items: [{ key: "scenario", durationMin: 60, order: O.scenario }],
   },
   {
-    key: "mega",
-    nameUk: "Комплекс «Мега свято»",
-    nameRu: "Комплекс «Мега праздник»",
-    nameEn: "“Mega party” package",
-    descUk: "Квест + Лазертаг + Паперове шоу + Бенкетна кімната",
-    descRu: "Квест + Лазертаг + Бумажное шоу + Банкетная комната",
-    descEn: "Quest + Lasertag + Paper show + Banquet room",
-    icon: "🎪",
-    fixedPriceWeekday: 0,
-    fixedPriceWeekend: 0,
-    sortOrder: 2,
-    items: ["quest", "laser", "papershow", "banquet"],
+    locationSlug: "nyvky", key: "nyvky-gold", icon: "🥇", maxPeople: 10,
+    nameUk: "Комплекс «Золотий стандарт»", nameRu: "Комплекс «Золотой стандарт»", nameEn: "“Gold standard” package",
+    perksUk: "60 хвилин – Квест «Антивірус»\n60 хвилин – Лазертаг\n60 хвилин – Банкетна кімната\nВедучий програми\nДо 10 учасників",
+    weekday: 12000, weekend: 14000, sortOrder: 2,
+    items: [
+      { key: "quest", durationMin: 60, order: O.quest },
+      { key: "laser", durationMin: 60, order: O.laser },
+      { key: "banquet", durationMin: 60, order: O.banquet },
+    ],
+  },
+  {
+    locationSlug: "nyvky", key: "nyvky-vip", icon: "👑", maxPeople: 10,
+    nameUk: "Комплекс «VIP PARTY»", nameRu: "Комплекс «VIP PARTY»", nameEn: "“VIP PARTY” package",
+    perksUk: "60 хвилин – Лазертаг «Сталкер»\n60 хвилин – Квест на вибір\n30 хвилин – Паперове шоу\n3,5 години – Банкетна кімната\nПіньята***\nФірмові подарунки**\nВиніс торту\nВедучий програми\nДо 10 учасників",
+    weekday: 28500, weekend: 30000, sortOrder: 3,
+    items: [
+      { key: "quest", durationMin: 60, order: O.quest },
+      { key: "scenario", durationMin: 60, order: O.scenario },
+      { key: "papershow", durationMin: 30, order: O.papershow },
+      { key: "banquet", durationMin: 210, order: O.banquet },
+    ],
+  },
+
+  // ---------- ТРЦ Gorodok ----------
+  {
+    locationSlug: "gorodok", key: "gorodok-start", icon: "🚀", maxPeople: 10,
+    nameUk: "Комплекс «Старт» (3 год)", nameRu: "Комплекс «Старт» (3 ч)", nameEn: "“Start” package (3h)",
+    perksUk: "Ведучий програми\n60 хв – Квест\n60 хв – Лазертаг\nБанкетний зал на період святкування та +60 хв після свята\nДо 10 учасників",
+    weekday: 14000, weekend: 16000, sortOrder: 1,
+    items: [
+      { key: "quest", durationMin: 60, order: O.quest },
+      { key: "laser", durationMin: 60, order: O.laser },
+      { key: "banquet", durationMin: 180, order: O.banquet },
+    ],
+  },
+  {
+    locationSlug: "gorodok", key: "gorodok-premium", icon: "⭐", maxPeople: 10,
+    nameUk: "Комплекс «Преміум» (3,5 години)", nameRu: "Комплекс «Премиум» (3,5 часа)", nameEn: "“Premium” package (3.5h)",
+    perksUk: "Ведучий програми\n60 хв – Квест\n30 хв – Лазертаг\n30 хв – Неонове паперове шоу\n30 хв – Пазли\nБанкетний зал на період святкування та +60 хв після свята\nДо 10 учасників",
+    weekday: 20500, weekend: 23500, sortOrder: 2,
+    items: [
+      { key: "quest", durationMin: 60, order: O.quest },
+      { key: "laser", durationMin: 30, order: O.laser },
+      { key: "papershow", durationMin: 30, order: O.papershow },
+      { key: "puzzles", durationMin: 30, order: O.puzzles },
+      { key: "banquet", durationMin: 210, order: O.banquet },
+    ],
+  },
+  {
+    locationSlug: "gorodok", key: "gorodok-vipall", icon: "💎", maxPeople: 10,
+    nameUk: "VIP «Все включено» (5,5 годин)", nameRu: "VIP «Всё включено» (5,5 часов)", nameEn: "VIP “All inclusive” (5.5h)",
+    perksUk: "Ведучий програми\n60 хв – Квест\n60 хв – Сценарний лазертаг\n30 хв – Паперове неонове шоу\n30 хв – Лазерний лабіринт\n30 хв – Гри в кальмара\n30 хв – Пазли\n30 хв – Неотрек\nБанкетний зал на період святкування +60 хв після активності\nПіньята\nФірмові подарунки*\nДо 10 учасників",
+    weekday: 46200, weekend: 51700, sortOrder: 3,
+    items: [
+      { key: "quest", durationMin: 60, order: O.quest },
+      { key: "scenario", durationMin: 60, order: O.scenario },
+      { key: "papershow", durationMin: 30, order: O.papershow },
+      { key: "maze", durationMin: 30, order: O.maze },
+      { key: "squid", durationMin: 30, order: O.squid },
+      { key: "puzzles", durationMin: 30, order: O.puzzles },
+      { key: "neotrek", durationMin: 30, order: O.neotrek },
+      { key: "banquet", durationMin: 330, order: O.banquet },
+    ],
+  },
+
+  // ---------- ТРЦ New Way ----------
+  {
+    locationSlug: "new-way", key: "newway-stalker", icon: "🎯", maxPeople: 6,
+    nameUk: "Комплекс «Сталкер»", nameRu: "Комплекс «Сталкер»", nameEn: "“Stalker” package",
+    perksUk: STALKER_PERKS, weekday: 8700, weekend: 9000, sortOrder: 1,
+    items: [{ key: "scenario", durationMin: 60, order: O.scenario }],
+  },
+  {
+    locationSlug: "new-way", key: "newway-gold", icon: "🥇", maxPeople: 10,
+    nameUk: "Комплекс «Золотий стандарт»", nameRu: "Комплекс «Золотой стандарт»", nameEn: "“Gold standard” package",
+    perksUk: "60 хвилин – Лазертаг\n60 хвилин – Квест «Місія Нездійсненна»\n60 хвилин – Банкетна кімната\nВедучий програми\nДо 10 учасників",
+    weekday: 12000, weekend: 14000, sortOrder: 2,
+    items: [
+      { key: "quest", durationMin: 60, order: O.quest },
+      { key: "laser", durationMin: 60, order: O.laser },
+      { key: "banquet", durationMin: 60, order: O.banquet },
+    ],
+  },
+  {
+    locationSlug: "new-way", key: "newway-vip", icon: "👑", maxPeople: 10,
+    nameUk: "Комплекс «VIP PARTY»", nameRu: "Комплекс «VIP PARTY»", nameEn: "“VIP PARTY” package",
+    perksUk: "60 хвилин – Лазертаг «Сталкер»\n60 хвилин – Квест на вибір\n60 хвилин – Паперове шоу\n3,5 години – Банкетна кімната\nПіньята***\nФірмові подарунки**\nВиніс торту\nВедучий програми\nДо 10 учасників",
+    weekday: 28500, weekend: 30000, sortOrder: 3,
+    items: [
+      { key: "quest", durationMin: 60, order: O.quest },
+      { key: "scenario", durationMin: 60, order: O.scenario },
+      { key: "papershow", durationMin: 60, order: O.papershow },
+      { key: "banquet", durationMin: 210, order: O.banquet },
+    ],
+  },
+
+  // ---------- ТРЦ DREAM Yellow ----------
+  {
+    locationSlug: "dream-yellow", key: "dream-stalker", icon: "🎯", maxPeople: 6,
+    nameUk: "Комплекс «Сталкер»", nameRu: "Комплекс «Сталкер»", nameEn: "“Stalker” package",
+    perksUk: STALKER_PERKS, weekday: 8700, weekend: 9000, sortOrder: 1,
+    items: [{ key: "scenario", durationMin: 60, order: O.scenario }],
+  },
+  {
+    locationSlug: "dream-yellow", key: "dream-gold", icon: "🥇", maxPeople: 10,
+    nameUk: "Комплекс «Золотий стандарт»", nameRu: "Комплекс «Золотой стандарт»", nameEn: "“Gold standard” package",
+    perksUk: "60 хвилин – Квест «Антивірус»\n60 хвилин – Лазертаг\n60 хвилин – Банкетна кімната\nВедучий програми\nДо 10 учасників",
+    weekday: 12000, weekend: 14000, sortOrder: 2,
+    items: [
+      { key: "quest", durationMin: 60, order: O.quest },
+      { key: "laser", durationMin: 60, order: O.laser },
+      { key: "banquet", durationMin: 60, order: O.banquet },
+    ],
+  },
+  {
+    locationSlug: "dream-yellow", key: "dream-vip", icon: "👑", maxPeople: 10,
+    nameUk: "Комплекс «VIP PARTY»", nameRu: "Комплекс «VIP PARTY»", nameEn: "“VIP PARTY” package",
+    perksUk: "60 хвилин – Лазертаг «Сталкер»\n60 хвилин – Квест на вибір\n30 хвилин – Паперове шоу\n3,5 години – Банкетна кімната\nПіньята***\nФірмові подарунки**\nВиніс торту\nВедучий програми\nДо 10 учасників",
+    weekday: 28500, weekend: 30000, sortOrder: 3,
+    items: [
+      { key: "quest", durationMin: 60, order: O.quest },
+      { key: "scenario", durationMin: 60, order: O.scenario },
+      { key: "papershow", durationMin: 30, order: O.papershow },
+      { key: "banquet", durationMin: 210, order: O.banquet },
+    ],
   },
 ];
 

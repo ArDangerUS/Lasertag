@@ -9,6 +9,6 @@ export async function GET(req: NextRequest) {
   if (!locationId || !date) {
     return NextResponse.json({ error: "locationId and date required" }, { status: 400 });
   }
-  const { busyByActivity } = await computeBusy(locationId, date);
-  return NextResponse.json({ busyByActivity });
+  const { busyByActivity, occupiedByActivity } = await computeBusy(locationId, date);
+  return NextResponse.json({ busyByActivity, occupiedByActivity });
 }

@@ -43,10 +43,14 @@ export default function BookingClient({
   const [picks, setPicks] = useState<Pick[]>([]);
   const [addonQty, setAddonQty] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState<Record<string, number[]>>({});
+  const [occupied, setOccupied] = useState<Record<string, number[]>>({});
   const [loadingAvail, setLoadingAvail] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ code: string; total: number } | null>(null);
+  // Package flow: which package's time-picker is open, and the chosen booking.
+  const [pkgOpenId, setPkgOpenId] = useState<string | null>(null);
+  const [pkgBooking, setPkgBooking] = useState<{ packageId: string; startMin: number } | null>(null);
 
   const location = locations.find((l) => l.id === locationId) ?? locations[0];
   const weekend = usesWeekendRate(date);
@@ -76,7 +80,69 @@ export default function BookingClient({
       return next;
     });
     setPicks((prev) => prev.filter((p) => locActivities.some((a) => a.id === p.activityId)));
+    // packages are location-specific — reset selection when location changes
+    setPkgOpenId(null);
+    setPkgBooking(null);
   }, [locationId, locActivities]);
+
+  // Packages offered at the current location.
+  const locPackages = useMemo(
+    () => catalog.packages.filter((p) => p.locationId === locationId),
+    [catalog.packages, locationId]
+  );
+
+  // Expand a package into concrete booking items given a start time.
+  // Non-room activities run consecutively (by `order`); room items (banquet)
+  // are reserved in parallel from the start for their full duration.
+  const expandPackage = useCallback(
+    (pkg: PublicCatalog["packages"][number], startMin: number) => {
+      const sorted = [...pkg.items].sort((a, b) => a.order - b.order);
+      const seq = sorted.filter((i) => actById.get(i.activityId)?.category !== "room");
+      const rooms = sorted.filter((i) => actById.get(i.activityId)?.category === "room");
+      const out: { activityId: string; startMin: number; durationMin: number; title: string }[] = [];
+      let cursor = startMin;
+      for (const it of seq) {
+        const a = actById.get(it.activityId);
+        out.push({ activityId: it.activityId, startMin: cursor, durationMin: it.durationMin, title: a?.name ?? "" });
+        cursor += it.durationMin;
+      }
+      for (const it of rooms) {
+        const a = actById.get(it.activityId);
+        out.push({ activityId: it.activityId, startMin, durationMin: it.durationMin, title: a?.name ?? "" });
+      }
+      return out;
+    },
+    [actById]
+  );
+
+  // Is the whole package sequence bookable starting at `startMin`?
+  const packageFits = useCallback(
+    (pkg: PublicCatalog["packages"][number], startMin: number) => {
+      const items = expandPackage(pkg, startMin);
+      for (const it of items) {
+        const end = it.startMin + it.durationMin;
+        if (end > location.closeMin) return false;
+        const occ = occupied[it.activityId] ?? [];
+        for (let m = it.startMin; m < end; m += SLOT_STEP_MIN) {
+          if (occ.includes(m)) return false;
+        }
+      }
+      return true;
+    },
+    [expandPackage, occupied, location]
+  );
+
+  // Valid start minutes for a package on the current date.
+  const packageStarts = useCallback(
+    (pkg: PublicCatalog["packages"][number]) => {
+      const arr: number[] = [];
+      for (let m = location.openMin; m + SLOT_STEP_MIN <= location.closeMin; m += SLOT_STEP_MIN) {
+        if (packageFits(pkg, m)) arr.push(m);
+      }
+      return arr;
+    },
+    [location, packageFits]
+  );
 
   // Fetch availability whenever location/date changes.
   useEffect(() => {
@@ -86,7 +152,10 @@ export default function BookingClient({
     fetch(`/api/availability?locationId=${locationId}&date=${date}`)
       .then((r) => r.json())
       .then((d) => {
-        if (!cancelled) setBusy(d.busyByActivity ?? {});
+        if (!cancelled) {
+          setBusy(d.busyByActivity ?? {});
+          setOccupied(d.occupiedByActivity ?? {});
+        }
       })
       .catch(() => {})
       .finally(() => {
@@ -220,18 +289,68 @@ export default function BookingClient({
         qty: addonQty[ad.id],
         price: ad.price * addonQty[ad.id],
       }));
+
+    // Selected package (if any) → concrete booking items at fixed price.
+    let pkg: {
+      packageId: string;
+      name: string;
+      icon: string;
+      price: number;
+      startMin: number;
+      endMin: number;
+      items: { activityId: string; startMin: number; durationMin: number; title: string }[];
+    } | null = null;
+    if (pkgBooking) {
+      const p = catalog.packages.find((x) => x.id === pkgBooking.packageId);
+      if (p) {
+        const expanded = expandPackage(p, pkgBooking.startMin);
+        const price = weekend ? p.fixedWeekend : p.fixedWeekday;
+        const endMin = Math.max(...expanded.map((i) => i.startMin + i.durationMin));
+        pkg = {
+          packageId: p.id,
+          name: p.name,
+          icon: p.icon,
+          price,
+          startMin: pkgBooking.startMin,
+          endMin,
+          items: expanded,
+        };
+      }
+    }
+
     const total =
-      items.reduce((s, i) => s + i.price, 0) + addons.reduce((s, a) => s + a.price, 0);
-    return { items, addons, total };
-  }, [picks, actById, actDuration, people, unitPrice, dict, catalog.addons, addonQty]);
+      items.reduce((s, i) => s + i.price, 0) +
+      addons.reduce((s, a) => s + a.price, 0) +
+      (pkg?.price ?? 0);
+    return { items, addons, pkg, total };
+  }, [picks, actById, actDuration, people, unitPrice, dict, catalog.addons, catalog.packages, addonQty, pkgBooking, expandPackage, weekend]);
 
   async function submit() {
     setError("");
     if (!customerPhone.trim()) return setError(dict.errPhone);
-    if (cart.items.length === 0) return setError(dict.errEmpty);
+    if (cart.items.length === 0 && !cart.pkg) return setError(dict.errEmpty);
     if (!people || people < 1) return setError(dict.errPeople);
     setSubmitting(true);
     try {
+      // Individual activity picks.
+      const individualItems = cart.items.map((i) => ({
+        activityId: i.activityId,
+        startMin: i.startMin,
+        durationMin: i.durationMin,
+        people: i.people,
+      }));
+      // Package items: fixed package price on the first item, 0 on the rest so
+      // the booking total equals the advertised package price.
+      const packageItems = cart.pkg
+        ? cart.pkg.items.map((it, idx) => ({
+            activityId: it.activityId,
+            startMin: it.startMin,
+            durationMin: it.durationMin,
+            people: Math.min(people, 200),
+            price: idx === 0 ? cart.pkg!.price : 0,
+          }))
+        : [];
+
       const res = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -241,13 +360,9 @@ export default function BookingClient({
           people,
           customerName,
           customerPhone,
+          comment: cart.pkg ? `Комплекс: ${cart.pkg.name}` : "",
           lang: locale,
-          items: cart.items.map((i) => ({
-            activityId: i.activityId,
-            startMin: i.startMin,
-            durationMin: i.durationMin,
-            people: i.people,
-          })),
+          items: [...individualItems, ...packageItems],
           addons: cart.addons.map((a) => ({ addonId: a.id, qty: a.qty })),
         }),
       });
@@ -266,6 +381,8 @@ export default function BookingClient({
     setPicks([]);
     setChosen({});
     setAddonQty({});
+    setPkgBooking(null);
+    setPkgOpenId(null);
   }
 
   const summaryLine = `${location.name} · ${date}${weekend ? ` · ${dict.weekendBadge}` : ""} · ${people} ${dict.stepPeople.toLowerCase()}`;
@@ -274,18 +391,21 @@ export default function BookingClient({
     <div style={{ minHeight: "100vh", background: "#f2f2f2" }}>
       {/* Header */}
       <header className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-[#e8e8e8] bg-white px-5 py-3 md:px-10">
-        {/* Logo → back to the start screen (regular lasertag) */}
-        <Link href="/" aria-label={dict.brandName} className="shrink-0">
-          <G75Logo />
-        </Link>
-
-        {/* Brand + messengers + phone */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <div className="text-[17px] font-bold leading-tight text-brand-green">
-            {dict.brandName}
+        {/* LEFT: logo (→ start screen) + brand name */}
+        <div className="flex items-center gap-3">
+          <Link href="/" aria-label={dict.brandName} className="shrink-0">
+            <G75Logo />
+          </Link>
+          <div className="leading-tight">
+            <div className="text-[17px] font-bold text-brand-green">{dict.brandName}</div>
+            <div className="text-[12px] text-[#777]">{dict.brandSub}</div>
           </div>
+        </div>
+
+        {/* RIGHT: contacts (Telegram / Viber / phone) then languages */}
+        <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-2">
           <div className="flex items-center gap-2">
-            {/* TODO: replace "#" with the real Telegram channel link */}
+            {/* TODO: replace "#" with the real Telegram link */}
             <a
               href="#"
               aria-label="Telegram"
@@ -307,10 +427,6 @@ export default function BookingClient({
               {phone}
             </a>
           </div>
-        </div>
-
-        {/* Language dropdown */}
-        <div className="ml-auto flex items-center gap-3">
           <LangDropdown locale={locale} />
         </div>
       </header>
@@ -384,43 +500,99 @@ export default function BookingClient({
         {/* Main grid */}
         <div className="mt-6 grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_360px]">
           <div className="flex flex-col gap-6">
-            {/* Packages */}
-            {catalog.packages.length > 0 && (
+            {/* Packages (комплекси) — per location, booked as a sequence */}
+            {locPackages.length > 0 && (
               <section className="rounded-card bg-white p-7 shadow-card">
                 <h2 className="m-0 text-[22px] font-extrabold text-brand-ink">{dict.packagesTitle}</h2>
-                <p className="mb-3 mt-1 text-[13px] text-[#999]">{dict.packagesHint}</p>
-                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                  {catalog.packages.map((p) => {
-                    const items = p.itemActivityIds
-                      .map((id) => actById.get(id))
-                      .filter(Boolean) as PubActivity[];
-                    const price =
-                      (weekend ? p.fixedWeekend : p.fixedWeekday) ||
-                      items.reduce((s, a) => s + linePrice(a), 0);
+                <p className="mb-4 mt-1 text-[13px] text-[#999]">{dict.packagesHint}</p>
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                  {locPackages.map((p) => {
+                    const price = weekend ? p.fixedWeekend : p.fixedWeekday;
+                    const open = pkgOpenId === p.id;
+                    const chosenPkg = pkgBooking?.packageId === p.id;
+                    const overCap = people > p.maxPeople;
+                    const starts = open && !overCap ? packageStarts(p) : [];
                     return (
-                      <button
+                      <div
                         key={p.id}
-                        onClick={() => {
-                          // Select all package activities (interest); user then picks times.
-                          setChosen((prev) => {
-                            const next = { ...prev };
-                            items.forEach((a) => {
-                              if (a.locationIds.includes(locationId)) next[a.id] = true;
-                            });
-                            return next;
-                          });
-                        }}
-                        className="rounded-2xl border border-[#E5E5E5] bg-white p-4 text-left hover:border-[#b9ef7a]"
+                        className={`flex flex-col rounded-2xl border p-5 transition ${
+                          chosenPkg ? "border-2 border-[#56EF02] bg-[#f6fee9]" : "border-[#E5E5E5] bg-white"
+                        }`}
                       >
                         <div className="flex items-center gap-2">
                           <span className="text-xl">{p.icon}</span>
-                          <span className="font-bold">{p.name}</span>
+                          <span className="text-[15px] font-extrabold text-brand-ink">{p.name}</span>
                         </div>
-                        <div className="mt-1 text-[12px] text-[#888]">{p.desc}</div>
-                        <div className="mt-2 text-[13px] font-extrabold text-brand-green">
-                          {dict.add} · ~{fmtMoney(price)} {dict.uah}
+                        <ul className="mt-3 flex flex-1 flex-col gap-1.5">
+                          {p.perks.map((perk, i) => (
+                            <li key={i} className="flex gap-2 text-[13px] leading-snug text-[#555]">
+                              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#56EF02]" />
+                              <span>{perk}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="mt-4 text-[13px] text-[#888]">
+                          <span className="text-[18px] font-extrabold text-brand-ink">
+                            {fmtMoney(price)}
+                          </span>{" "}
+                          {dict.uah} · {weekend ? "ПТ-НД" : "ПН-ЧТ"}
                         </div>
-                      </button>
+
+                        {chosenPkg ? (
+                          <button
+                            onClick={() => {
+                              setPkgBooking(null);
+                              setPkgOpenId(null);
+                            }}
+                            className="mt-3 rounded-full border border-[#b9ef7a] bg-[#eefcdc] py-2.5 text-[14px] font-bold text-[#3c6b0c]"
+                          >
+                            ✓ {dict.added} · {dict.remove}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setPkgOpenId(open ? null : p.id)}
+                            className="mt-3 rounded-full py-2.5 text-[14px] font-bold text-brand-ink2"
+                            style={{ background: G }}
+                          >
+                            {open ? dict.pkgHideTimes : dict.pkgChoose}
+                          </button>
+                        )}
+
+                        {open && !chosenPkg && (
+                          <div className="mt-3 border-t border-[#eee] pt-3">
+                            {overCap ? (
+                              <div className="rounded-xl bg-[#fdf3e3] p-3 text-[12px] leading-relaxed text-[#b6791b]">
+                                {dict.pkgMaxPeople.replace("{max}", String(p.maxPeople))}
+                              </div>
+                            ) : starts.length === 0 ? (
+                              <div className="rounded-xl border border-dashed border-[#ddd] p-3 text-center text-[12px] text-[#999]">
+                                {dict.pkgNoTime}
+                              </div>
+                            ) : (
+                              <>
+                                <div className="text-[11px] font-bold tracking-wide text-[#777]">
+                                  {dict.pkgStartTime}
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {starts.map((m) => (
+                                    <button
+                                      key={m}
+                                      onClick={() => {
+                                        setPkgBooking({ packageId: p.id, startMin: m });
+                                        setPkgOpenId(null);
+                                        setError("");
+                                      }}
+                                      className="rounded-full border border-[#E5E5E5] bg-white px-3 py-1.5 text-[13px] font-semibold hover:border-[#56EF02]"
+                                    >
+                                      {minToHHMM(m)}
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
@@ -661,12 +833,48 @@ export default function BookingClient({
                 <div className="text-lg font-extrabold">{dict.yourBooking}</div>
                 <div className="mt-1 text-[13px] text-[#aaa]">{summaryLine}</div>
 
-                {cart.items.length === 0 && cart.addons.length === 0 ? (
+                {cart.items.length === 0 && cart.addons.length === 0 && !cart.pkg ? (
                   <div className="mt-4 rounded-2xl border border-dashed border-[#555] px-4 py-6 text-center text-[13px] leading-relaxed text-[#999]">
                     {dict.cartEmpty}
                   </div>
                 ) : (
                   <div className="mt-4 flex flex-col gap-2.5">
+                    {/* Selected package block */}
+                    {cart.pkg && (
+                      <div className="rounded-xl bg-[#1d1d1d] p-3.5">
+                        <div className="flex items-start justify-between gap-2.5">
+                          <div>
+                            <div className="text-[13px] font-bold">
+                              {cart.pkg.icon} {cart.pkg.name}
+                            </div>
+                            <div className="mt-0.5 text-[12px] text-[#999]">
+                              {minToHHMM(cart.pkg.startMin)}–{minToHHMM(cart.pkg.endMin)}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2.5">
+                            <span className="whitespace-nowrap text-[13px] font-bold">
+                              {fmtMoney(cart.pkg.price)} {dict.uah}
+                            </span>
+                            <button
+                              onClick={() => setPkgBooking(null)}
+                              className="h-[22px] w-[22px] rounded-full bg-[#333] text-[12px] text-[#bbb]"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                        <div className="mt-2 flex flex-col gap-1 border-t border-[#2c2c2c] pt-2">
+                          {cart.pkg.items.map((it, i) => (
+                            <div key={i} className="flex justify-between text-[11px] text-[#8f8f8f]">
+                              <span>{it.title}</span>
+                              <span>
+                                {minToHHMM(it.startMin)}–{minToHHMM(it.startMin + it.durationMin)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {cart.items.map((it) => (
                       <CartRow
                         key={it.key}
@@ -838,11 +1046,8 @@ function ViberGlyph() {
 
 function LangDropdown({ locale }: { locale: Locale }) {
   const [open, setOpen] = useState(false);
-  const langs: { code: Locale; label: string }[] = [
-    { code: "uk", label: "Українська" },
-    { code: "ru", label: "Русский" },
-    { code: "en", label: "English" },
-  ];
+  const all: Locale[] = ["uk", "ru", "en"];
+  const others = all.filter((l) => l !== locale);
   useEffect(() => {
     if (!open) return;
     const close = () => setOpen(false);
@@ -854,23 +1059,20 @@ function LangDropdown({ locale }: { locale: Locale }) {
     <div className="relative" onClick={(e) => e.stopPropagation()}>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 rounded-full border border-[#e8e8e8] px-3 py-2 text-[13px] font-bold text-brand-ink hover:border-[#cfcfcf]"
+        className="flex items-center gap-1.5 px-2 py-1.5 text-[14px] font-bold text-brand-green"
       >
         {locale.toUpperCase()}
-        <span className={`text-[10px] text-[#999] transition ${open ? "rotate-180" : ""}`}>▾</span>
+        <span className={`text-[10px] transition ${open ? "rotate-180" : ""}`}>⌄</span>
       </button>
       {open && (
-        <div className="absolute right-0 z-30 mt-2 w-40 overflow-hidden rounded-xl border border-[#eee] bg-white py-1 shadow-lg">
-          {langs.map((l) => (
+        <div className="absolute right-0 z-30 mt-1 w-16 overflow-hidden rounded-xl border border-[#eee] bg-white py-1 text-center shadow-lg">
+          {others.map((l) => (
             <a
-              key={l.code}
-              href={`/?lang=${l.code}`}
-              className={`flex items-center justify-between px-3.5 py-2 text-[13px] hover:bg-[#f5f5f5] ${
-                l.code === locale ? "font-bold text-brand-green" : "text-brand-ink"
-              }`}
+              key={l}
+              href={`/?lang=${l}`}
+              className="block px-3 py-1.5 text-[14px] font-semibold text-brand-ink hover:bg-[#f4f4f4]"
             >
-              <span>{l.label}</span>
-              <span className="text-[11px] font-bold uppercase text-[#999]">{l.code}</span>
+              {l.toUpperCase()}
             </a>
           ))}
         </div>

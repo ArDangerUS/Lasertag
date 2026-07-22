@@ -15,11 +15,14 @@ export type BusyMap = Record<string, Set<number>>; // activityId -> set of busy 
 // activity, taking existing (non-cancelled) bookings and their cleanup buffer
 // into account. A slot i is "busy" for an activity if starting a new session at
 // i would exceed capacity at any overlapping minute.
+// Also returns `occupiedByActivity`: the 30-min slots already at capacity — used
+// to test arbitrary spans (e.g. package sequences and the banquet room).
 export async function computeBusy(locationId: string, date: string): Promise<{
   busyByActivity: Record<string, number[]>;
+  occupiedByActivity: Record<string, number[]>;
 }> {
   const location = await prisma.location.findUnique({ where: { id: locationId } });
-  if (!location) return { busyByActivity: {} };
+  if (!location) return { busyByActivity: {}, occupiedByActivity: {} };
 
   const acts = await prisma.locationActivity.findMany({
     where: { locationId, active: true },
@@ -36,6 +39,7 @@ export async function computeBusy(locationId: string, date: string): Promise<{
   const step = SLOT_STEP_MIN;
 
   const busyByActivity: Record<string, number[]> = {};
+  const occupiedByActivity: Record<string, number[]> = {};
 
   for (const la of acts) {
     const activity = la.activity;
@@ -54,6 +58,13 @@ export async function computeBusy(locationId: string, date: string): Promise<{
       }
     }
 
+    // Slots at/over capacity (a new session cannot use these minutes).
+    const occupied: number[] = [];
+    for (let m = open; m < close; m += step) {
+      if ((occ[m] ?? 0) >= cap) occupied.push(m);
+    }
+    occupiedByActivity[activity.id] = occupied;
+
     const busy: number[] = [];
     for (let i = open; i + activity.durationMin <= close; i += step) {
       // would a new session at i overflow capacity anywhere in its span?
@@ -69,5 +80,5 @@ export async function computeBusy(locationId: string, date: string): Promise<{
     busyByActivity[activity.id] = busy;
   }
 
-  return { busyByActivity };
+  return { busyByActivity, occupiedByActivity };
 }

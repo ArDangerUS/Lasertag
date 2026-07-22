@@ -2,6 +2,15 @@ import { prisma } from "./prisma";
 import { localizedName, localizedDesc, localizedSub } from "./i18n";
 import type { Locale } from "./constants";
 
+function perksFor(
+  p: { perksUk: string; perksRu: string; perksEn: string },
+  locale: Locale
+): string {
+  if (locale === "ru") return p.perksRu || p.perksUk;
+  if (locale === "en") return p.perksEn || p.perksUk;
+  return p.perksUk;
+}
+
 export type PubPrice = {
   locationId: string | null;
   durationMin: number | null;
@@ -42,14 +51,17 @@ export type PubLocation = {
 
 export type PubAddon = { id: string; name: string; sub: string; price: number };
 
+export type PubPackageItem = { activityId: string; durationMin: number; order: number };
 export type PubPackage = {
   id: string;
+  locationId: string | null;
   name: string;
-  desc: string;
+  perks: string[];
   icon: string;
+  maxPeople: number;
   fixedWeekday: number;
   fixedWeekend: number;
-  itemActivityIds: string[];
+  items: PubPackageItem[];
 };
 
 export type PublicCatalog = {
@@ -118,12 +130,21 @@ export async function loadPublicCatalog(locale: Locale): Promise<PublicCatalog> 
     })),
     packages: packages.map((p) => ({
       id: p.id,
+      locationId: p.locationId,
       name: localizedName(p, locale),
-      desc: localizedDesc(p, locale),
+      perks: perksFor(p, locale)
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean),
       icon: p.icon,
+      maxPeople: p.maxPeople,
       fixedWeekday: p.fixedPriceWeekday,
       fixedWeekend: p.fixedPriceWeekend,
-      itemActivityIds: p.items.map((i) => i.activityId),
+      items: p.items.map((i) => ({
+        activityId: i.activityId,
+        durationMin: i.durationMin,
+        order: i.order,
+      })),
     })),
   };
 }
