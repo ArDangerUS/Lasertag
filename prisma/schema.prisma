@@ -1,0 +1,260 @@
+// G-75 Booking + CRM data model
+// Dev uses SQLite for zero-config runs. For production, change `provider` to
+// "postgresql" and point DATABASE_URL at your Postgres instance — the schema is
+// written to be portable (no SQLite-only features).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Catalog: locations, activities, prices, addons, packages
+// ---------------------------------------------------------------------------
+
+model Location {
+  id        String   @id @default(cuid())
+  slug      String   @unique // nyvky, gorodok, new-way, dream-yellow, mobile
+  name      String // "Нивки G-75"
+  address   String   @default("")
+  // Working hours in minutes from midnight. Guests may pre-book earlier/later.
+  openMin   Int      @default(600) // 10:00
+  closeMin  Int      @default(1260) // 21:00
+  isMobile  Boolean  @default(false) // виїзний формат
+  // How many banquet rooms exist at this location (parallel bookings limit)
+  banquetRooms Int   @default(0)
+  hasShowRoom  Boolean @default(false) // dedicated room for show programs (Городок)
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+
+  activities LocationActivity[]
+  bookings   Booking[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Activity {
+  id        String  @id @default(cuid())
+  key       String  @unique // laser, scenario, quest, papershow, banquet, maze, ...
+  category  String  @default("game") // game | show | room | package
+  // Localised names
+  nameUk    String
+  nameRu    String  @default("")
+  nameEn    String  @default("")
+  descUk    String  @default("")
+  descRu    String  @default("")
+  descEn    String  @default("")
+  icon      String  @default("🎯")
+  photo     String  @default("") // /uploads/... or remote url
+
+  perPerson Boolean @default(false) // price is per participant vs per group
+  // For fixed-duration activities. Lasertag uses durationOptions instead.
+  durationMin Int   @default(60)
+  // JSON array of allowed durations in minutes, e.g. "[30,60]" for lasertag.
+  durationOptions String @default("")
+  // Cleanup/turnaround buffer after the activity (minutes). Quests may set 0-20.
+  cleanupMin Int    @default(0)
+  minPeople Int     @default(1)
+  maxPeople Int     @default(60)
+
+  sortOrder Int     @default(0)
+  active    Boolean @default(true)
+
+  locations LocationActivity[]
+  packageItems PackageItem[]
+  bookingItems BookingItem[]
+  prices    ActivityPrice[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Join: which activities are offered at which location (+ optional per-location
+// availability toggle). Prices live in ActivityPrice keyed by location.
+model LocationActivity {
+  id         String   @id @default(cuid())
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  locationId String
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  activityId String
+  active     Boolean  @default(true)
+
+  @@unique([locationId, activityId])
+}
+
+// A price row. locationId null = default/base price for the activity.
+// durationMin null = single-duration activity. For lasertag we store one row per
+// (location?, duration) pair. weekday vs weekend captured in two columns.
+model ActivityPrice {
+  id          String  @id @default(cuid())
+  activity    Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  activityId  String
+  locationId  String? // null => applies to all locations unless overridden
+  durationMin Int? // null => activity's fixed duration
+  priceWeekday Int
+  priceWeekend Int
+
+  @@unique([activityId, locationId, durationMin])
+}
+
+model Addon {
+  id       String  @id @default(cuid())
+  key      String  @unique
+  nameUk   String
+  nameRu   String  @default("")
+  nameEn   String  @default("")
+  subUk    String  @default("")
+  subRu    String  @default("")
+  subEn    String  @default("")
+  price    Int
+  sortOrder Int    @default(0)
+  active   Boolean @default(true)
+  bookingAddons BookingAddon[]
+}
+
+// A complex offer / bundle (e.g. "Комплекс Сталкер"): an ordered list of
+// activities that get booked in sequence (quest → lasertag → paper show → banquet).
+model Package {
+  id        String  @id @default(cuid())
+  key       String  @unique
+  nameUk    String
+  nameRu    String  @default("")
+  nameEn    String  @default("")
+  descUk    String  @default("")
+  descRu    String  @default("")
+  descEn    String  @default("")
+  icon      String  @default("🎁")
+  photo     String  @default("")
+  // Optional flat package price. If 0, price = sum of its items.
+  fixedPriceWeekday Int @default(0)
+  fixedPriceWeekend Int @default(0)
+  sortOrder Int     @default(0)
+  active    Boolean @default(true)
+  items     PackageItem[]
+}
+
+model PackageItem {
+  id         String   @id @default(cuid())
+  package    Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  packageId  String
+  activity   Activity @relation(fields: [activityId], references: [id])
+  activityId String
+  order      Int      @default(0) // sequence order in the celebration
+}
+
+// ---------------------------------------------------------------------------
+// Bookings
+// ---------------------------------------------------------------------------
+
+// NOTE: SQLite does not support Prisma enums. Allowed values are enforced in
+// code (src/lib/constants.ts) and documented here.
+//   BookingStatus: NEW | CONFIRMED | PREPAID | CANCELLED
+//   BookingSource: SITE | CRM
+//   Role:          ADMIN | MANAGER | VIEWER
+
+model Booking {
+  id         String   @id @default(cuid())
+  code       String   @unique // short public code, e.g. G75-7K3QD
+  location   Location @relation(fields: [locationId], references: [id])
+  locationId String
+  date       String // ISO date "2026-07-11" (local day)
+  status     String   @default("NEW")  // BookingStatus
+  source     String   @default("SITE") // BookingSource
+  lang       String   @default("uk")
+
+  customerName  String @default("")
+  customerPhone String
+  comment       String @default("")
+
+  people     Int      @default(1)
+  totalPrice Int      @default(0) // grn, snapshot of computed total (editable)
+  prepaidAmount Int   @default(0) // сплачений аванс (grn)
+
+  // Telegram linkage for the confirmation flow
+  telegramChatId  String @default("")
+  telegramUsername String @default("")
+
+  items      BookingItem[]
+  addons     BookingAddon[]
+  logs       AuditLog[]
+
+  createdById String?
+  createdBy   User?   @relation("bookingCreatedBy", fields: [createdById], references: [id])
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([locationId, date])
+  @@index([status])
+}
+
+model BookingItem {
+  id         String   @id @default(cuid())
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId  String
+  activity   Activity @relation(fields: [activityId], references: [id])
+  activityId String
+  // Snapshot of what was booked (survives catalog edits)
+  title      String
+  startMin   Int // minutes from midnight
+  durationMin Int
+  people     Int  @default(1)
+  price      Int  // grn, snapshot (editable in CRM)
+  roomIndex  Int  @default(0) // which banquet room / parallel slot
+
+  @@index([bookingId])
+}
+
+model BookingAddon {
+  id        String  @id @default(cuid())
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId String
+  addon     Addon   @relation(fields: [addonId], references: [id])
+  addonId   String
+  title     String
+  qty       Int     @default(1)
+  price     Int
+}
+
+// ---------------------------------------------------------------------------
+// Users, roles, audit
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("MANAGER") // Role: ADMIN | MANAGER | VIEWER
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  auditLogs      AuditLog[]
+  bookingsCreated Booking[] @relation("bookingCreatedBy")
+}
+
+// Immutable trail: who did what. Used to trace deletions and edits.
+model AuditLog {
+  id        String   @id @default(cuid())
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+  actorName String   @default("") // snapshot of actor (survives user deletion)
+  action    String // CREATE | UPDATE | DELETE | STATUS | LOGIN | PRICE
+  entity    String // Booking | Activity | ActivityPrice | User | ...
+  entityId  String   @default("")
+  summary   String   @default("") // human-readable one-liner
+  before    String   @default("") // JSON snapshot
+  after     String   @default("") // JSON snapshot
+
+  booking   Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  bookingId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}

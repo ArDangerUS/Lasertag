@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #f2f2f2;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+}
+
+body {
+  font-family: "Open Sans", system-ui, -apple-system, sans-serif;
+  color: #111111;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: #139600;
+  text-decoration: none;
+}
+a:hover {
+  color: #51cd0c;
+}
+
+/* Hide number input spinners for a cleaner participant field */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Thin scrollbar for calendar columns in the CRM */
+.thin-scroll::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: #d4d4d4;
+  border-radius: 8px;
+}
