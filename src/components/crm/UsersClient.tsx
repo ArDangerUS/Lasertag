@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ROLE_META, ROLES, type Role } from "@/lib/constants";
 
@@ -8,7 +8,10 @@ type U = { id: string; email: string; name: string; role: string; active: boolea
 
 export default function UsersClient({ me, initial }: { me: string; initial: U[] }) {
   const router = useRouter();
-  const [users] = useState(initial);
+  // Local copy updated optimistically after each action — the table reflects
+  // changes immediately, no page reload needed. Re-synced on server refresh.
+  const [users, setUsers] = useState(initial);
+  useEffect(() => setUsers(initial), [initial]);
   const [showCreate, setShowCreate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -30,6 +33,11 @@ export default function UsersClient({ me, initial }: { me: string; initial: U[] 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Помилка");
+      // show the new user in the table immediately
+      setUsers((us) => [
+        ...us,
+        { id: data.id, email: email.toLowerCase().trim(), name, role, active: true },
+      ]);
       setShowCreate(false);
       setEmail("");
       setName("");
@@ -52,6 +60,19 @@ export default function UsersClient({ me, initial }: { me: string; initial: U[] 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Помилка");
+      // apply the change to the table immediately
+      setUsers((us) =>
+        us.map((u) =>
+          u.id === id
+            ? {
+                ...u,
+                ...(typeof body.role === "string" ? { role: body.role } : {}),
+                ...(typeof body.active === "boolean" ? { active: body.active } : {}),
+                ...(typeof body.name === "string" ? { name: body.name } : {}),
+              }
+            : u
+        )
+      );
       router.refresh();
     } catch (e: any) {
       alert(e?.message || "Помилка");

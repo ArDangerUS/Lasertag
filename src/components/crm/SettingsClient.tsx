@@ -55,9 +55,18 @@ export default function SettingsClient({
 function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
   const [active, setActive] = useState(act.active);
   const [names, setNames] = useState({ uk: act.nameUk, ru: act.nameRu, en: act.nameEn });
-  const [group, setGroup] = useState({ min: act.minPeople, max: act.maxPeople, cleanup: act.cleanupMin });
+  // Numeric fields are kept as strings so the user can clear them completely
+  // while typing; an empty field falls back to the last saved value.
+  const [saved, setSaved] = useState({ min: act.minPeople, max: act.maxPeople, cleanup: act.cleanupMin });
+  const [group, setGroup] = useState({
+    min: String(act.minPeople),
+    max: String(act.maxPeople),
+    cleanup: String(act.cleanupMin),
+  });
   const [locIds, setLocIds] = useState<string[]>(act.locationIds);
-  const [prices, setPrices] = useState(act.prices);
+  const [prices, setPrices] = useState(
+    act.prices.map((p) => ({ ...p, wdStr: String(p.priceWeekday), weStr: String(p.priceWeekend) }))
+  );
   const [savedFlash, setSavedFlash] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -66,15 +75,30 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
     setTimeout(() => setSavedFlash(""), 1800);
   }
 
-  async function savePrice(p: Price) {
+  const parseOr = (s: string, fallback: number) => {
+    const n = parseInt(s, 10);
+    return Number.isFinite(n) && n >= 0 ? n : fallback;
+  };
+
+  async function savePrice(idx: number) {
+    const p = prices[idx];
+    const weekday = parseOr(p.wdStr, p.priceWeekday);
+    const weekend = parseOr(p.weStr, p.priceWeekend);
     setBusy(true);
     try {
       const res = await fetch(`/api/crm/prices/${p.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ priceWeekday: p.priceWeekday, priceWeekend: p.priceWeekend }),
+        body: JSON.stringify({ priceWeekday: weekday, priceWeekend: weekend }),
       });
       if (!res.ok) throw new Error();
+      setPrices((ps) =>
+        ps.map((x, i) =>
+          i === idx
+            ? { ...x, priceWeekday: weekday, priceWeekend: weekend, wdStr: String(weekday), weStr: String(weekend) }
+            : x
+        )
+      );
       flash("Ціну збережено ✓");
     } catch {
       flash("Помилка");
@@ -84,6 +108,9 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
   }
 
   async function saveActivity() {
+    const min = Math.max(1, parseOr(group.min, saved.min));
+    const max = Math.max(1, parseOr(group.max, saved.max));
+    const cleanup = parseOr(group.cleanup, saved.cleanup);
     setBusy(true);
     try {
       const res = await fetch(`/api/crm/activities/${act.id}`, {
@@ -94,13 +121,15 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
           nameUk: names.uk,
           nameRu: names.ru,
           nameEn: names.en,
-          minPeople: Math.max(1, group.min),
-          maxPeople: Math.max(1, group.max),
-          cleanupMin: group.cleanup,
+          minPeople: min,
+          maxPeople: max,
+          cleanupMin: cleanup,
           locationIds: locIds,
         }),
       });
       if (!res.ok) throw new Error();
+      setSaved({ min, max, cleanup });
+      setGroup({ min: String(min), max: String(max), cleanup: String(cleanup) });
       flash("Збережено ✓");
     } catch {
       flash("Помилка");
@@ -172,17 +201,18 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
           <div className="mb-1 flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase text-[#777]">Мін. учасників</span>
             <button
-              onClick={() => setGroup((g) => ({ ...g, min: 1 }))}
-              className="rounded-full bg-[#0e0e0e] px-2 py-0.5 text-[11px] font-bold text-[#56EF02]"
+              onClick={() => setGroup((g) => ({ ...g, min: "1" }))}
+              className="rounded-lg bg-[#0e0e0e] px-2.5 py-1 text-[12px] font-bold text-[#56EF02] hover:bg-[#1c1c1c]"
               title="Без мінімуму"
             >
-              1
+              min
             </button>
           </div>
           <input
             type="number"
             value={group.min}
-            onChange={(e) => setGroup((g) => ({ ...g, min: Number(e.target.value) || 1 }))}
+            onChange={(e) => setGroup((g) => ({ ...g, min: e.target.value }))}
+            onBlur={() => setGroup((g) => (g.min.trim() === "" ? { ...g, min: String(saved.min) } : g))}
             className="w-full rounded-lg border border-[#333] bg-[#0e0e0e] px-3 py-2 text-[14px] text-white"
           />
         </div>
@@ -190,24 +220,40 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
           <div className="mb-1 flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase text-[#777]">Макс. учасників</span>
             <button
-              onClick={() => setGroup((g) => ({ ...g, max: UNLIMITED }))}
-              className="rounded-full bg-[#0e0e0e] px-2 py-0.5 text-[11px] font-bold text-[#56EF02]"
-              title="Без обмежень (999)"
+              onClick={() => setGroup((g) => ({ ...g, max: String(UNLIMITED) }))}
+              className="rounded-lg bg-[#0e0e0e] px-2.5 py-1 text-[13px] font-bold text-[#56EF02] hover:bg-[#1c1c1c]"
+              title="Без обмежень"
             >
-              ∞
+              ∞ max
             </button>
           </div>
+          <div className="relative">
+            <input
+              type="number"
+              value={group.max}
+              onChange={(e) => setGroup((g) => ({ ...g, max: e.target.value }))}
+              onBlur={() => setGroup((g) => (g.max.trim() === "" ? { ...g, max: String(saved.max) } : g))}
+              className="w-full rounded-lg border border-[#333] bg-[#0e0e0e] px-3 py-2 pr-20 text-[14px] text-white"
+            />
+            {parseInt(group.max, 10) >= UNLIMITED && (
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[15px] font-extrabold text-[#56EF02]">
+                ∞ max
+              </span>
+            )}
+          </div>
+        </div>
+        <div>
+          <div className="mb-1 text-[11px] font-bold uppercase text-[#777]">Перегрузка, хв</div>
           <input
             type="number"
-            value={group.max}
-            onChange={(e) => setGroup((g) => ({ ...g, max: Number(e.target.value) || UNLIMITED }))}
+            value={group.cleanup}
+            onChange={(e) => setGroup((g) => ({ ...g, cleanup: e.target.value }))}
+            onBlur={() =>
+              setGroup((g) => (g.cleanup.trim() === "" ? { ...g, cleanup: String(saved.cleanup) } : g))
+            }
             className="w-full rounded-lg border border-[#333] bg-[#0e0e0e] px-3 py-2 text-[14px] text-white"
           />
-          {group.max >= UNLIMITED && (
-            <div className="mt-1 text-[11px] text-[#56EF02]">∞ без обмежень</div>
-          )}
         </div>
-        <NumField label="Перегрузка, хв" value={group.cleanup} onChange={(v) => setGroup((g) => ({ ...g, cleanup: v }))} />
       </div>
 
       {/* prices */}
@@ -230,10 +276,15 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
                 <td className="py-2 pr-4">
                   <input
                     type="number"
-                    value={p.priceWeekday}
+                    value={p.wdStr}
                     onChange={(e) =>
+                      setPrices((ps) => ps.map((x, i) => (i === idx ? { ...x, wdStr: e.target.value } : x)))
+                    }
+                    onBlur={() =>
                       setPrices((ps) =>
-                        ps.map((x, i) => (i === idx ? { ...x, priceWeekday: Number(e.target.value) || 0 } : x))
+                        ps.map((x, i) =>
+                          i === idx && x.wdStr.trim() === "" ? { ...x, wdStr: String(x.priceWeekday) } : x
+                        )
                       )
                     }
                     className="w-24 rounded-lg border border-[#333] bg-[#0e0e0e] px-2 py-1.5 text-right text-white"
@@ -242,10 +293,15 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
                 <td className="py-2 pr-4">
                   <input
                     type="number"
-                    value={p.priceWeekend}
+                    value={p.weStr}
                     onChange={(e) =>
+                      setPrices((ps) => ps.map((x, i) => (i === idx ? { ...x, weStr: e.target.value } : x)))
+                    }
+                    onBlur={() =>
                       setPrices((ps) =>
-                        ps.map((x, i) => (i === idx ? { ...x, priceWeekend: Number(e.target.value) || 0 } : x))
+                        ps.map((x, i) =>
+                          i === idx && x.weStr.trim() === "" ? { ...x, weStr: String(x.priceWeekend) } : x
+                        )
                       )
                     }
                     className="w-24 rounded-lg border border-[#333] bg-[#0e0e0e] px-2 py-1.5 text-right text-white"
@@ -253,7 +309,7 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
                 </td>
                 <td className="py-2">
                   <button
-                    onClick={() => savePrice(p)}
+                    onClick={() => savePrice(idx)}
                     disabled={busy}
                     className="rounded-full bg-[#0e0e0e] px-3 py-1.5 text-[12px] font-bold text-[#56EF02]"
                   >
@@ -275,20 +331,6 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
           Зберегти розвагу
         </button>
       </div>
-    </div>
-  );
-}
-
-function NumField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
-  return (
-    <div>
-      <div className="mb-1 text-[11px] font-bold uppercase text-[#777]">{label}</div>
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value) || 0)}
-        className="w-full rounded-lg border border-[#333] bg-[#0e0e0e] px-3 py-2 text-[14px] text-white"
-      />
     </div>
   );
 }
