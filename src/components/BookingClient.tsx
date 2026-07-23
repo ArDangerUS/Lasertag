@@ -339,6 +339,27 @@ export default function BookingClient({
         return;
       }
       // flexible: merge consecutive 30-min slots
+      const emit = (start: number, slots: number[]) => {
+        const end = start + slots.length * 30;
+        // If the block starts inside the −40% window (Mon–Thu 10:00–11:00) but
+        // runs past 11:00, split it so the discounted and regular parts are
+        // shown as two separate lines.
+        const discountedAtStart =
+          lasertagMorningDiscount({
+            activityKey: a.key,
+            locationSlug: location.slug,
+            date,
+            startMin: start,
+          }) < 1;
+        if (discountedAtStart && end > 660) {
+          const before = slots.filter((s) => s < 660);
+          const after = slots.filter((s) => s >= 660);
+          pushBlock(a, start, before.length * 30, before);
+          if (after.length) pushBlock(a, 660, after.length * 30, after);
+          return;
+        }
+        pushBlock(a, start, slots.length * 30, slots);
+      };
       let blockStart = sorted[0];
       let run: number[] = [sorted[0]];
       for (let i = 1; i <= sorted.length; i++) {
@@ -347,7 +368,7 @@ export default function BookingClient({
           run.push(cur);
           continue;
         }
-        pushBlock(a, blockStart, run.length * 30, [...run]);
+        emit(blockStart, [...run]);
         if (cur != null) {
           blockStart = cur;
           run = [cur];
@@ -463,8 +484,8 @@ export default function BookingClient({
 
   return (
     <div style={{ minHeight: "100vh", background: "#f2f2f2" }}>
-      {/* Header */}
-      <header className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-[#e8e8e8] bg-white px-5 py-3 md:px-10">
+      {/* Header (sticky, like the main site) */}
+      <header className="sticky top-0 z-50 flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-[#e8e8e8] bg-white px-5 py-3 md:px-10">
         {/* LEFT: logo (→ start screen) + brand name */}
         <div className="flex items-center gap-3">
           <Link href="/" aria-label={dict.brandName} className="shrink-0">
@@ -948,7 +969,7 @@ export default function BookingClient({
           </div>
 
           {/* Summary */}
-          <aside id="bk-summary" className="scroll-mt-4 rounded-card bg-brand-ink p-6 text-white lg:sticky lg:top-6">
+          <aside id="bk-summary" className="scroll-mt-24 rounded-card bg-brand-ink p-6 text-white lg:sticky lg:top-24">
             {result ? (
               <div className="py-6 text-center">
                 <div
@@ -1174,17 +1195,36 @@ const REMOTE_LOGO = "https://www.lasertag.in.ua/wp-content/uploads/2026/04/logo4
 
 function BrandLogo() {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  // If the remote logo hasn't loaded within 4s (blocked/hanging request),
+  // switch to the drawn emblem so the header never shows a broken image.
+  useEffect(() => {
+    if (loaded || failed) return;
+    const t = setTimeout(() => setFailed(true), 4000);
+    return () => clearTimeout(t);
+  }, [loaded, failed]);
+
   if (failed) return <G75Logo />;
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={REMOTE_LOGO}
-      alt="Лазертаг G-75"
-      width={52}
-      height={52}
-      className="h-[52px] w-[52px] object-contain"
-      onError={() => setFailed(true)}
-    />
+    <span className="relative inline-block h-[52px] w-[52px]">
+      {!loaded && (
+        <span className="absolute inset-0">
+          <G75Logo />
+        </span>
+      )}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={REMOTE_LOGO}
+        alt="Лазертаг G-75"
+        width={52}
+        height={52}
+        className="relative h-[52px] w-[52px] object-contain"
+        style={{ opacity: loaded ? 1 : 0 }}
+        onLoad={() => setLoaded(true)}
+        onError={() => setFailed(true)}
+      />
+    </span>
   );
 }
 
@@ -1210,18 +1250,20 @@ function G75Logo() {
   );
 }
 
+// Official Telegram paper-plane (simple-icons path, plane only).
 function TelegramGlyph() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M21.94 4.9 3.6 11.98c-1.05.42-1.04 1.02-.18 1.28l4.6 1.44 1.77 5.55c.22.6.4.83.83.83.33 0 .5-.15.7-.35l2.2-2.14 4.58 3.38c.84.46 1.44.22 1.65-.78l2.98-14.05c.3-1.22-.46-1.77-1.26-1.4Z" />
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ marginLeft: -1, marginTop: 1 }}>
+      <path d="M23.91 3.79 20.3 20.84c-.25 1.21-.98 1.5-2 .94l-5.5-4.07-2.66 2.57c-.3.3-.55.56-1.1.56-.72 0-.6-.27-.84-.95L6.3 13.7l-5.45-1.7c-1.18-.35-1.19-1.16.26-1.75l21.26-8.2c.97-.43 1.9.24 1.53 1.73Z" />
     </svg>
   );
 }
 
+// Official Viber bubble-with-handset (simple-icons path).
 function ViberGlyph() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12 3C7.9 3 4.5 5.7 4.5 9.4c0 1.7.7 3.2 1.9 4.4-.1 1-.5 2.2-.9 2.9-.2.3 0 .7.4.6 1.5-.4 2.6-1 3.3-1.5.9.3 1.8.4 2.8.4 4.1 0 7.5-2.7 7.5-6.4C19 5.7 15.6 3 12 3Zm0 11.4c-.9 0-1.8-.1-2.6-.4l-.4-.2-.4.3c-.5.3-1.1.7-1.9 1 .3-.6.5-1.3.6-1.9l.1-.5-.4-.4c-1-1-1.6-2.2-1.6-3.5 0-2.9 2.8-5.2 6.1-5.2s6.1 2.3 6.1 5.2-2.7 5.2-6.1 5.2Zm3.3-3.6c-.2-.1-1-.5-1.2-.6-.2-.1-.3-.1-.4.1l-.5.6c-.1.1-.2.1-.4 0-.7-.3-1.3-.7-1.8-1.5-.1-.2 0-.3.1-.4l.3-.4c.1-.1 0-.3 0-.4l-.5-1.1c-.1-.3-.3-.3-.4-.3h-.3c-.1 0-.3 0-.5.2-.2.2-.6.6-.6 1.4s.6 1.6.7 1.7c.1.1 1.2 1.9 3 2.6 1.1.4 1.5.5 2 .4.3-.1 1-.4 1.1-.8.1-.4.1-.7.1-.8-.1-.1-.2-.1-.4-.2Z" />
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M11.4 0C9.473.028 5.333.344 3.02 2.467 1.302 4.187.696 6.7.633 9.817.57 12.933.488 18.776 6.12 20.36h.003l-.004 2.416s-.037.977.61 1.177c.777.242 1.234-.5 1.98-1.302.407-.44.972-1.084 1.397-1.58 3.85.324 6.812-.416 7.15-.525.776-.252 5.176-.816 5.892-6.657.74-6.02-.36-9.83-2.34-11.546-.596-.55-3.006-2.3-8.375-2.323 0 0-.395-.025-1.037-.017zm.058 1.693c.545-.004.88.017.88.017 4.542.02 6.717 1.388 7.222 1.846 1.675 1.435 2.53 4.868 1.906 9.897v.002c-.596 4.876-4.17 5.184-4.83 5.396-.28.09-2.882.737-6.153.523 0 0-2.436 2.94-3.197 3.704-.12.12-.26.167-.352.144-.13-.033-.166-.188-.164-.414l.02-4.018c-4.762-1.32-4.485-6.292-4.43-8.895.054-2.604.543-4.738 1.996-6.173 1.96-1.773 5.474-2.018 7.11-2.03zm.38 2.602c-.167 0-.303.135-.303.302 0 .167.136.302.302.302 1.532 0 2.8.5 3.798 1.482.997.982 1.485 2.312 1.5 4.066.002.167.14.3.306.3h.002c.167 0 .3-.14.3-.306-.017-1.905-.552-3.402-1.68-4.512-1.126-1.11-2.564-1.634-4.226-1.634zm-3.4.937c-.184-.033-.378.003-.542.106l-.01.005c-.328.19-.628.435-.9.767-.014.02-.03.034-.042.05-.22.267-.347.53-.38.786-.02.152-.006.306.042.452l.017.012c.234.717.77 1.996 1.966 3.6.696.937 1.393 1.722 2.086 2.35.35.313.767.66 1.216.996l.13.09c.673.474 1.335.836 1.94 1.096 0 0 1.7.744 2.42.744.212 0 .458-.05.657-.19.267-.19.457-.42.6-.68v-.007c.146-.263.096-.514-.106-.68-.4-.34-1.03-.76-1.42-.99-.402-.238-.804-.09-.97.128l-.352.444c-.176.216-.5.187-.5.187l-.01.005c-2.375-.607-3.01-3.014-3.01-3.014s-.03-.323.19-.5l.442-.353c.212-.166.366-.568.128-.97-.23-.39-.65-1.02-.99-1.42-.148-.18-.36-.276-.583-.316zm4.49.324c-.167 0-.302.135-.302.302 0 .167.135.302.302.302 1.16.02 2.09.36 2.777 1.096.688.735 1.023 1.717 1.006 2.977 0 .167.133.303.3.305h.002c.166 0 .302-.133.304-.3.02-1.39-.36-2.55-1.166-3.41-.807-.862-1.936-1.252-3.223-1.272zm1.037 1.32c-.167 0-.302.136-.302.303 0 .167.135.302.302.302.523.01.937.164 1.216.457.28.293.43.717.44 1.28.002.166.14.3.305.3h.003c.167-.002.3-.14.3-.306-.013-.664-.202-1.213-.61-1.64-.406-.427-.96-.63-1.653-.643z" />
     </svg>
   );
 }
