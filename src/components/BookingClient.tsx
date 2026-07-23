@@ -756,9 +756,14 @@ export default function BookingClient({
                       <span className="mt-1.5 block text-[12px] text-[#888]">
                         {a.durationOptions.length ? (
                           <>
-                            30 {dict.min} – {fmtMoney(priceFor(a, 30))} · 60 {dict.min} –{" "}
-                            {fmtMoney(priceFor(a, 60))} {dict.uah}{" "}
-                            {a.perPerson ? dict.perPerson : dict.perGroup}
+                            <span className="font-semibold text-[#666]">
+                              30 {dict.min} – {fmtMoney(priceFor(a, 30))}
+                            </span>
+                            <span className="mx-1.5 inline-block h-[11px] w-px translate-y-[1px] bg-[#d5d5d5] align-middle" />
+                            <span className="font-semibold text-[#666]">
+                              60 {dict.min} – {fmtMoney(priceFor(a, 60))}
+                            </span>{" "}
+                            {dict.uah} {a.perPerson ? dict.perPerson : dict.perGroup}
                           </>
                         ) : (
                           <>
@@ -898,60 +903,61 @@ export default function BookingClient({
                       ? ad.tiers[String(on ? qty : tierKeys[0])] ?? ad.price
                       : ad.price;
                     return (
-                      <div
+                      <button
                         key={ad.id}
-                        className={`flex flex-col justify-between rounded-2xl border p-4 ${
-                          on ? "border-[#56EF02] bg-[#f6fee9]" : "border-[#E5E5E5] bg-white"
+                        onClick={() => setAddonQty((q) => ({ ...q, [ad.id]: on ? 0 : 1 }))}
+                        className={`flex flex-col rounded-2xl border p-4 text-left transition ${
+                          on ? "border-2 border-[#56EF02] bg-[#f6fee9]" : "border-[#E5E5E5] bg-white"
                         }`}
                       >
-                        <div>
-                          <div className="text-[14px] font-bold leading-tight">{ad.name}</div>
-                          <div className="mt-1 text-[12px] text-[#888]">{ad.sub}</div>
-                        </div>
+                        <span className="flex w-full items-start gap-2">
+                          <span className="flex-1 text-[14px] font-bold leading-tight">{ad.name}</span>
+                          <span
+                            className={`flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                              on ? "bg-[#56EF02] text-brand-ink2" : "bg-[#f0f0f0] text-[#ccc]"
+                            }`}
+                          >
+                            ✓
+                          </span>
+                        </span>
+                        {ad.sub && <span className="mt-1 block text-[12px] text-[#888]">{ad.sub}</span>}
 
                         {/* Photographer hours stepper */}
                         {ad.tiers && on && (
-                          <div className="mt-3 flex items-center gap-2">
-                            <button
+                          <span
+                            className="mt-3 flex items-center gap-2"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <span
+                              role="button"
                               onClick={() =>
                                 setAddonQty((q) => ({ ...q, [ad.id]: Math.max(1, qty - 1) }))
                               }
-                              className="h-7 w-7 rounded-full border border-[#dcdcdc] bg-white text-[14px] font-bold"
+                              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-[#c9e8a9] bg-white text-[14px] font-bold"
                             >
                               −
-                            </button>
+                            </span>
                             <span className="text-[13px] font-bold">
                               {qty} {dict.hoursShort}
                             </span>
-                            <button
+                            <span
+                              role="button"
                               onClick={() =>
                                 setAddonQty((q) => ({ ...q, [ad.id]: Math.min(maxTier, qty + 1) }))
                               }
-                              className="h-7 w-7 rounded-full border border-[#dcdcdc] bg-white text-[14px] font-bold"
+                              className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-[#c9e8a9] bg-white text-[14px] font-bold"
                             >
                               +
-                            </button>
-                          </div>
+                            </span>
+                          </span>
                         )}
 
-                        <div className="mt-3.5 flex items-center justify-between">
-                          <span className={`font-extrabold ${shownPrice > 0 ? "text-[15px]" : "text-[12px] text-[#999]"}`}>
-                            {shownPrice > 0 ? fmtMoney(shownPrice) : dict.priceTBD}
+                        {shownPrice > 0 && (
+                          <span className="mt-auto block pt-3 text-[15px] font-extrabold">
+                            {fmtMoney(shownPrice)} <span className="text-[12px] font-semibold text-[#999]">{dict.uah}</span>
                           </span>
-                          <button
-                            onClick={() =>
-                              setAddonQty((q) => ({ ...q, [ad.id]: on ? 0 : 1 }))
-                            }
-                            className={`rounded-full px-3 py-1.5 text-[12px] font-bold ${
-                              on
-                                ? "bg-[#eefcdc] text-[#3c6b0c]"
-                                : "bg-brand-ink text-[#56EF02]"
-                            }`}
-                          >
-                            {on ? dict.added : dict.add}
-                          </button>
-                        </div>
-                      </div>
+                        )}
+                      </button>
                     );
                   })}
                 </div>
@@ -1071,7 +1077,7 @@ export default function BookingClient({
                         key={ad.id}
                         title={ad.title}
                         sub={ad.tiered ? `${ad.qty} ${dict.hoursShort}` : `×${ad.qty}`}
-                        price={ad.price > 0 ? `${fmtMoney(ad.price)} ${dict.uah}` : dict.priceTBD}
+                        price={ad.price > 0 ? `${fmtMoney(ad.price)} ${dict.uah}` : "—"}
                         onRemove={() => setAddonQty((q) => ({ ...q, [ad.id]: 0 }))}
                       />
                     ))}
