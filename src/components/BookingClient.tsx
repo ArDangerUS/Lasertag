@@ -94,6 +94,24 @@ export default function BookingClient({
     setExpandedPerks({}); // always collapse details when returning to a location
   }, [locationId, locActivities]);
 
+  // If the group grows beyond an activity's capacity, drop that selection.
+  useEffect(() => {
+    setChosen((prev) => {
+      const next: Record<string, boolean> = {};
+      Object.keys(prev).forEach((id) => {
+        const a = actById.get(id);
+        if (a && people <= a.maxPeople) next[id] = true;
+      });
+      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+    });
+    setPicks((prev) =>
+      prev.filter((p) => {
+        const a = actById.get(p.activityId);
+        return a && people <= a.maxPeople;
+      })
+    );
+  }, [people, actById]);
+
   // Packages offered at the current location.
   const locPackages = useMemo(
     () => catalog.packages.filter((p) => p.locationId === locationId),
@@ -563,7 +581,9 @@ export default function BookingClient({
                 min={1}
                 max={100}
                 value={people}
-                onChange={(e) => setPeople(Math.max(1, Number(e.target.value) || 1))}
+                onChange={(e) =>
+                  setPeople(Math.min(100, Math.max(1, Number(e.target.value) || 1)))
+                }
                 className="w-full rounded-xl border border-[#E5E5E5] px-3.5 py-3 text-center text-[15px]"
               />
               <button
@@ -732,14 +752,26 @@ export default function BookingClient({
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
                 {locActivities.map((a) => {
                   const on = !!chosen[a.id];
+                  const overMax = people > a.maxPeople;
+                  const rangeLabel =
+                    a.minPeople <= 1
+                      ? dict.peopleUpTo.replace("{n}", String(a.maxPeople))
+                      : dict.peopleRange
+                          .replace("{a}", String(a.minPeople))
+                          .replace("{b}", String(a.maxPeople));
                   return (
                     <button
                       key={a.id}
-                      onClick={() => toggleChosen(a.id)}
+                      onClick={() => {
+                        if (overMax) return;
+                        toggleChosen(a.id);
+                      }}
                       className={`rounded-2xl p-3 text-left transition ${
                         on
                           ? "border-2 border-[#56EF02] bg-[#f6fee9]"
-                          : "border border-[#E5E5E5] bg-white"
+                          : overMax
+                            ? "cursor-not-allowed border border-[#eee] bg-[#fafafa] opacity-70"
+                            : "border border-[#E5E5E5] bg-white"
                       }`}
                     >
                       <span className="flex items-center gap-2">
@@ -774,6 +806,12 @@ export default function BookingClient({
                             {fmtMoney(unitPrice(a))} {dict.uah}{" "}
                             {a.perPerson ? dict.perPerson : dict.perGroup} · {a.durationMin} {dict.min}
                           </>
+                        )}
+                        <span className="block text-[11px] text-[#a5a5a5]">{rangeLabel}</span>
+                        {overMax && (
+                          <span className="mt-1 block text-[11px] font-bold text-[#b6791b]">
+                            {dict.maxPeopleWarn.replace("{n}", String(a.maxPeople))}
+                          </span>
                         )}
                       </span>
                     </button>

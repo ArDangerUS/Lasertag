@@ -59,6 +59,9 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
   const itemData = input.items.map((it) => {
     const act = actById.get(it.activityId);
     if (!act) throw new Error("Розвагу не знайдено");
+    if (it.people > act.maxPeople) {
+      throw new Error(`«${act.nameUk}»: максимум ${act.maxPeople} учасників`);
+    }
     let unit = it.price;
     if (unit == null) {
       const rows = act.prices.map((p) => ({
