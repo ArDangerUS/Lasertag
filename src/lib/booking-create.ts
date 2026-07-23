@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { resolvePrice, makeCode, usesWeekendRate, lasertagMorningDiscount } from "./pricing";
+import { resolvePrice, tieredBlockPrice, makeCode, lasertagMorningDiscount } from "./pricing";
 import { audit } from "./audit";
 import type { SessionUser } from "./auth";
 import { z } from "zod";
@@ -67,12 +67,21 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
         priceWeekday: p.priceWeekday,
         priceWeekend: p.priceWeekend,
       }));
-      const resolved = resolvePrice(rows, {
-        locationId: input.locationId,
-        durationMin: act.durationOptions ? it.durationMin : null,
-        date: input.date,
-      });
-      unit = resolved ?? 0;
+      if (act.durationOptions) {
+        // Flexible 30-min-slot activity: merged blocks price as hours + half.
+        unit = tieredBlockPrice(rows, {
+          locationId: input.locationId,
+          date: input.date,
+          durationMin: it.durationMin,
+        });
+      } else {
+        unit =
+          resolvePrice(rows, {
+            locationId: input.locationId,
+            durationMin: null,
+            date: input.date,
+          }) ?? 0;
+      }
       // Weekday-morning lasertag discount (mirrors the client).
       const factor = lasertagMorningDiscount({
         activityKey: act.key,
@@ -100,7 +109,17 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
   const addonData = input.addons.map((a) => {
     const ad = addonById.get(a.addonId);
     if (!ad) throw new Error("Додаток не знайдено");
-    return { addonId: ad.id, title: ad.nameUk, qty: a.qty, price: ad.price * a.qty };
+    // Tiered addons (photographer hours): price comes from the tier table.
+    let price = ad.price * a.qty;
+    if (ad.tiers) {
+      try {
+        const tiers = JSON.parse(ad.tiers) as Record<string, number>;
+        price = tiers[String(a.qty)] ?? ad.price * a.qty;
+      } catch {
+        /* fall back to flat */
+      }
+    }
+    return { addonId: ad.id, title: ad.nameUk, qty: a.qty, price };
   });
 
   const total =

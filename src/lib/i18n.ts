@@ -35,6 +35,9 @@ const uk = {
   pkgShowLess: "Згорнути",
   durationLaser: "Тривалість лазертагу:",
   durationLabel: "Тривалість:",
+  priceTBD: "ціна уточнюється",
+  hoursShort: "год",
+  mergeHint: "Оберіть кілька слотів підряд — вони обʼєднаються (2 × 30 хв = ціна за годину).",
   min: "хв",
   perPerson: "/ людину",
   perGroup: "/ компанію",
@@ -66,10 +69,8 @@ const uk = {
   errPeople: "Вкажіть кількість учасників",
   // notes
   notes: [
-    "* Під час проведення свята можуть грати й інші учасники. Індивідуальне закриття арени для гри в лазертаг під вашу компанію на одну годину — 14 000 грн.",
-    "** Подарунки надаються виключно для учасників, які беруть участь у розвагах на святі.",
-    "*** Якщо ви бажаєте принести піньяту з собою — це коштує 500 грн (забороняється наповнення конфеті, льодяники Chupa Chups та скляні іграшки).",
-    "**** У разі відмови від святкування або зміни дати менше ніж за 10 днів до події, внесений аванс не повертається у грошовій формі. Сплачена сума зберігається у вигляді сертифіката на послуги центру, дійсного 3 місяці з дати первинного бронювання.",
+    "* Подарунки надаються виключно для учасників, які беруть участь у розвагах на святі.",
+    "** У разі відмови від святкування або зміни дати менше ніж за 10 днів до події, внесений аванс не повертається у грошовій формі. Сплачена сума зберігається у вигляді сертифіката на послуги центру, дійсного 3 місяці з дати первинного бронювання.",
   ],
 };
 
@@ -104,6 +105,9 @@ const ru: Dict = {
   pkgShowLess: "Свернуть",
   durationLaser: "Длительность лазертага:",
   durationLabel: "Длительность:",
+  priceTBD: "цена уточняется",
+  hoursShort: "ч",
+  mergeHint: "Выберите несколько слотов подряд — они объединятся (2 × 30 мин = цена за час).",
   min: "мин",
   perPerson: "/ человека",
   perGroup: "/ компанию",
@@ -133,10 +137,8 @@ const ru: Dict = {
   errEmpty: "Добавьте хотя бы одно развлечение",
   errPeople: "Укажите количество участников",
   notes: [
-    "* Во время праздника могут играть и другие участники. Индивидуальное закрытие арены для игры в лазертаг под вашу компанию на один час — 14 000 грн.",
-    "** Подарки предоставляются исключительно участникам развлечений на празднике.",
-    "*** Если вы хотите принести пиньяту с собой — это стоит 500 грн (запрещено наполнение конфетти, леденцы Chupa Chups и стеклянные игрушки).",
-    "**** При отказе или переносе даты менее чем за 10 дней аванс не возвращается деньгами, а сохраняется в виде сертификата на услуги центра сроком на 3 месяца.",
+    "* Подарки предоставляются исключительно участникам развлечений на празднике.",
+    "** При отказе или переносе даты менее чем за 10 дней аванс не возвращается деньгами, а сохраняется в виде сертификата на услуги центра сроком на 3 месяца.",
   ],
 };
 
@@ -171,6 +173,9 @@ const en: Dict = {
   pkgShowLess: "Show less",
   durationLaser: "Lasertag duration:",
   durationLabel: "Duration:",
+  priceTBD: "price on request",
+  hoursShort: "h",
+  mergeHint: "Pick several slots in a row — they merge (2 × 30 min = the hourly price).",
   min: "min",
   perPerson: "/ person",
   perGroup: "/ group",
@@ -200,10 +205,8 @@ const en: Dict = {
   errEmpty: "Add at least one activity",
   errPeople: "Enter the number of guests",
   notes: [
-    "* Other guests may also play during your party. A private arena for your group for one hour costs 14,000 UAH.",
-    "** Gifts are provided only to guests taking part in the party activities.",
-    "*** Bringing your own piñata costs 500 UAH (no confetti filling, Chupa Chups or glass toys allowed).",
-    "**** Cancelling or rescheduling less than 10 days before the event: the prepayment is kept as a 3-month service certificate rather than refunded in cash.",
+    "* Gifts are provided only to guests taking part in the party activities.",
+    "** Cancelling or rescheduling less than 10 days before the event: the prepayment is kept as a 3-month service certificate rather than refunded in cash.",
   ],
 };
 

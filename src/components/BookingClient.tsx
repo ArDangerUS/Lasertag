@@ -6,7 +6,14 @@ import type { PublicCatalog, PubActivity } from "@/lib/public-catalog";
 import type { Dict } from "@/lib/i18n";
 import type { Locale } from "@/lib/constants";
 import { SLOT_STEP_MIN } from "@/lib/constants";
-import { resolvePrice, usesWeekendRate, fmtMoney, minToHHMM, lasertagMorningDiscount } from "@/lib/pricing";
+import {
+  resolvePrice,
+  tieredBlockPrice,
+  usesWeekendRate,
+  fmtMoney,
+  minToHHMM,
+  lasertagMorningDiscount,
+} from "@/lib/pricing";
 import { confirmDeepLink } from "@/lib/telegram-links";
 
 type Pick = { activityId: string; startMin: number };
@@ -39,7 +46,6 @@ export default function BookingClient({
   const [people, setPeople] = useState(10);
   const [customerPhone, setPhone] = useState("");
   const [customerName, setName] = useState("");
-  const [duration, setDuration] = useState(60); // lasertag duration
   const [chosen, setChosen] = useState<Record<string, boolean>>({});
   const [picks, setPicks] = useState<Pick[]>([]);
   const [addonQty, setAddonQty] = useState<Record<string, number>>({});
@@ -171,33 +177,35 @@ export default function BookingClient({
     };
   }, [locationId, date]);
 
+  // Duration-flexible activities (lasertag, banquet, Gorodok attractions) are
+  // booked as 30-min slots; adjacent slots merge into longer blocks in the cart.
   const actDuration = useCallback(
-    (a: PubActivity) => (a.durationOptions.length ? duration : a.durationMin),
-    [duration]
+    (a: PubActivity) => (a.durationOptions.length ? 30 : a.durationMin),
+    []
   );
 
-  const unitPrice = useCallback(
-    (a: PubActivity) => {
-      const rows = a.prices.map((p) => ({
+  const priceRowsOf = useCallback(
+    (a: PubActivity) =>
+      a.prices.map((p) => ({
         locationId: p.locationId,
         durationMin: p.durationMin,
         priceWeekday: p.weekday,
         priceWeekend: p.weekend,
-      }));
-      return (
-        resolvePrice(rows, {
-          locationId,
-          durationMin: a.durationOptions.length ? duration : null,
-          date,
-        }) ?? 0
-      );
-    },
-    [locationId, duration, date]
+      })),
+    []
   );
 
-  const linePrice = useCallback(
-    (a: PubActivity) => (a.perPerson ? unitPrice(a) * Math.max(1, people) : unitPrice(a)),
-    [unitPrice, people]
+  // Price for a specific duration (30/60 for flexible; null for fixed).
+  const priceFor = useCallback(
+    (a: PubActivity, durationMin: number | null) =>
+      resolvePrice(priceRowsOf(a), { locationId, durationMin, date }) ?? 0,
+    [priceRowsOf, locationId, date]
+  );
+
+  const unitPrice = useCallback(
+    (a: PubActivity) =>
+      a.durationOptions.length ? priceFor(a, 30) : priceFor(a, null),
+    [priceFor]
   );
 
   const chosenActs = useMemo(
@@ -270,54 +278,91 @@ export default function BookingClient({
     return arr;
   }, [location]);
 
-  // Cart.
+  // Cart. Consecutive 30-min picks of the same flexible activity merge into
+  // one block priced as hours + leftover half-hour (2×30 = the hourly price).
   const cart = useMemo(() => {
-    const items = picks
-      .map((p) => {
-        const a = actById.get(p.activityId);
-        if (!a) return null;
-        const dur = actDuration(a);
-        const factor = lasertagMorningDiscount({
-          activityKey: a.key,
-          locationSlug: location.slug,
-          date,
-          startMin: p.startMin,
-        });
-        const unit = Math.round(unitPrice(a) * factor);
-        const discounted = factor < 1;
-        return {
-          key: `${p.activityId}|${p.startMin}`,
-          activityId: p.activityId,
-          startMin: p.startMin,
-          durationMin: dur,
-          title: a.name,
-          icon: a.icon,
-          sub: `${minToHHMM(p.startMin)}–${minToHHMM(p.startMin + dur)}${discounted ? " · −40%" : ""} · ${
-            a.perPerson ? `${people} × ${fmtMoney(unit)}` : dict.perGroup
-          }`,
-          price: a.perPerson ? unit * Math.max(1, people) : unit,
-          people: a.perPerson ? Math.max(1, people) : Math.min(people, a.maxPeople),
-        };
-      })
-      .filter(Boolean) as {
+    type CartItem = {
       key: string;
       activityId: string;
       startMin: number;
       durationMin: number;
+      slotStarts: number[]; // constituent picks (for removal)
       title: string;
       icon: string;
       sub: string;
       price: number;
       people: number;
-    }[];
+    };
+    const items: CartItem[] = [];
+
+    const pushBlock = (a: PubActivity, startMin: number, durationMin: number, slotStarts: number[]) => {
+      const factor = lasertagMorningDiscount({
+        activityKey: a.key,
+        locationSlug: location.slug,
+        date,
+        startMin,
+      });
+      const base = a.durationOptions.length
+        ? tieredBlockPrice(priceRowsOf(a), { locationId, date, durationMin })
+        : priceFor(a, null);
+      const unit = Math.round(base * factor);
+      const discounted = factor < 1;
+      items.push({
+        key: `${a.id}|${startMin}|${durationMin}`,
+        activityId: a.id,
+        startMin,
+        durationMin,
+        slotStarts,
+        title: a.name,
+        icon: a.icon,
+        sub: `${minToHHMM(startMin)}–${minToHHMM(startMin + durationMin)}${discounted ? " · −40%" : ""} · ${
+          a.perPerson ? `${people} × ${fmtMoney(unit)}` : dict.perGroup
+        }`,
+        price: a.perPerson ? unit * Math.max(1, people) : unit,
+        people: a.perPerson ? Math.max(1, people) : Math.min(people, a.maxPeople),
+      });
+    };
+
+    const byAct = new Map<string, number[]>();
+    picks.forEach((p) => {
+      const arr = byAct.get(p.activityId) ?? [];
+      arr.push(p.startMin);
+      byAct.set(p.activityId, arr);
+    });
+    byAct.forEach((starts, activityId) => {
+      const a = actById.get(activityId);
+      if (!a) return;
+      const sorted = [...starts].sort((x, y) => x - y);
+      if (!a.durationOptions.length) {
+        // fixed-duration activity: each pick is its own item
+        sorted.forEach((s) => pushBlock(a, s, a.durationMin, [s]));
+        return;
+      }
+      // flexible: merge consecutive 30-min slots
+      let blockStart = sorted[0];
+      let run: number[] = [sorted[0]];
+      for (let i = 1; i <= sorted.length; i++) {
+        const cur = sorted[i];
+        if (cur != null && cur === run[run.length - 1] + 30) {
+          run.push(cur);
+          continue;
+        }
+        pushBlock(a, blockStart, run.length * 30, [...run]);
+        if (cur != null) {
+          blockStart = cur;
+          run = [cur];
+        }
+      }
+    });
+    items.sort((x, y) => x.startMin - y.startMin);
+
     const addons = catalog.addons
       .filter((ad) => (addonQty[ad.id] ?? 0) > 0)
-      .map((ad) => ({
-        id: ad.id,
-        title: ad.name,
-        qty: addonQty[ad.id],
-        price: ad.price * addonQty[ad.id],
-      }));
+      .map((ad) => {
+        const qty = addonQty[ad.id];
+        const price = ad.tiers ? (ad.tiers[String(qty)] ?? ad.price * qty) : ad.price * qty;
+        return { id: ad.id, title: ad.name, qty, price, tiered: !!ad.tiers };
+      });
 
     // Selected package (if any) → concrete booking items at fixed price.
     let pkg: {
@@ -352,7 +397,7 @@ export default function BookingClient({
       addons.reduce((s, a) => s + a.price, 0) +
       (pkg?.price ?? 0);
     return { items, addons, pkg, total };
-  }, [picks, actById, actDuration, people, unitPrice, dict, catalog.addons, catalog.packages, addonQty, pkgBooking, expandPackage, weekend]);
+  }, [picks, actById, people, dict, catalog.addons, catalog.packages, addonQty, pkgBooking, expandPackage, weekend, location.slug, date, locationId, priceRowsOf, priceFor]);
 
   async function submit() {
     setError("");
@@ -688,33 +733,23 @@ export default function BookingClient({
                         </span>
                       </span>
                       <span className="mt-1.5 block text-[12px] text-[#888]">
-                        {fmtMoney(unitPrice(a))} {dict.uah} {a.perPerson ? dict.perPerson : dict.perGroup} ·{" "}
-                        {actDuration(a)} {dict.min}
+                        {a.durationOptions.length ? (
+                          <>
+                            30 {dict.min} – {fmtMoney(priceFor(a, 30))} · 60 {dict.min} –{" "}
+                            {fmtMoney(priceFor(a, 60))} {dict.uah}{" "}
+                            {a.perPerson ? dict.perPerson : dict.perGroup}
+                          </>
+                        ) : (
+                          <>
+                            {fmtMoney(unitPrice(a))} {dict.uah}{" "}
+                            {a.perPerson ? dict.perPerson : dict.perGroup} · {a.durationMin} {dict.min}
+                          </>
+                        )}
                       </span>
                     </button>
                   );
                 })}
               </div>
-
-              {/* Duration toggle (lasertag / banquet — both support 30/60) */}
-              {chosenActs.some((a) => a.durationOptions.length > 0) && (
-                <div className="mt-4 flex items-center gap-2.5">
-                  <span className="text-[13px] text-[#555]">{dict.durationLabel}</span>
-                  {[30, 60].map((d) => (
-                    <button
-                      key={d}
-                      onClick={() => setDuration(d)}
-                      className={`rounded-full px-3.5 py-1.5 text-[13px] font-semibold ${
-                        duration === d
-                          ? "bg-brand-ink text-[#56EF02]"
-                          : "border border-[#E5E5E5] bg-white text-brand-ink"
-                      }`}
-                    >
-                      {d} {dict.min}
-                    </button>
-                  ))}
-                </div>
-              )}
 
               {/* Availability calendar */}
               <div className="mb-3 mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -732,6 +767,9 @@ export default function BookingClient({
                 <span className="h-px flex-1 bg-[#f0f0f0]" />
                 {loadingAvail && <span className="text-[11px] text-[#bbb]">…</span>}
               </div>
+              {chosenActs.some((a) => a.durationOptions.length > 0) && (
+                <p className="mb-3 mt-0 text-[12px] text-[#999]">{dict.mergeHint}</p>
+              )}
 
               {chosenActs.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-[#ddd] p-5 text-center text-[13px] text-[#999]">
@@ -829,7 +867,15 @@ export default function BookingClient({
                 <h2 className="mb-4 text-xl font-extrabold text-brand-ink">{dict.addonsTitle}</h2>
                 <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4">
                   {catalog.addons.map((ad) => {
-                    const on = (addonQty[ad.id] ?? 0) > 0;
+                    const qty = addonQty[ad.id] ?? 0;
+                    const on = qty > 0;
+                    const tierKeys = ad.tiers
+                      ? Object.keys(ad.tiers).map(Number).sort((x, y) => x - y)
+                      : [];
+                    const maxTier = tierKeys.length ? tierKeys[tierKeys.length - 1] : 0;
+                    const shownPrice = ad.tiers
+                      ? ad.tiers[String(on ? qty : tierKeys[0])] ?? ad.price
+                      : ad.price;
                     return (
                       <div
                         key={ad.id}
@@ -841,8 +887,36 @@ export default function BookingClient({
                           <div className="text-[14px] font-bold leading-tight">{ad.name}</div>
                           <div className="mt-1 text-[12px] text-[#888]">{ad.sub}</div>
                         </div>
+
+                        {/* Photographer hours stepper */}
+                        {ad.tiers && on && (
+                          <div className="mt-3 flex items-center gap-2">
+                            <button
+                              onClick={() =>
+                                setAddonQty((q) => ({ ...q, [ad.id]: Math.max(1, qty - 1) }))
+                              }
+                              className="h-7 w-7 rounded-full border border-[#dcdcdc] bg-white text-[14px] font-bold"
+                            >
+                              −
+                            </button>
+                            <span className="text-[13px] font-bold">
+                              {qty} {dict.hoursShort}
+                            </span>
+                            <button
+                              onClick={() =>
+                                setAddonQty((q) => ({ ...q, [ad.id]: Math.min(maxTier, qty + 1) }))
+                              }
+                              className="h-7 w-7 rounded-full border border-[#dcdcdc] bg-white text-[14px] font-bold"
+                            >
+                              +
+                            </button>
+                          </div>
+                        )}
+
                         <div className="mt-3.5 flex items-center justify-between">
-                          <span className="text-[15px] font-extrabold">{fmtMoney(ad.price)}</span>
+                          <span className={`font-extrabold ${shownPrice > 0 ? "text-[15px]" : "text-[12px] text-[#999]"}`}>
+                            {shownPrice > 0 ? fmtMoney(shownPrice) : dict.priceTBD}
+                          </span>
                           <button
                             onClick={() =>
                               setAddonQty((q) => ({ ...q, [ad.id]: on ? 0 : 1 }))
@@ -961,15 +1035,22 @@ export default function BookingClient({
                         title={`${it.icon} ${it.title}`}
                         sub={it.sub}
                         price={`${fmtMoney(it.price)} ${dict.uah}`}
-                        onRemove={() => togglePick(it.activityId, it.startMin)}
+                        onRemove={() =>
+                          setPicks((prev) =>
+                            prev.filter(
+                              (p) =>
+                                !(p.activityId === it.activityId && it.slotStarts.includes(p.startMin))
+                            )
+                          )
+                        }
                       />
                     ))}
                     {cart.addons.map((ad) => (
                       <CartRow
                         key={ad.id}
                         title={ad.title}
-                        sub={`×${ad.qty}`}
-                        price={`${fmtMoney(ad.price)} ${dict.uah}`}
+                        sub={ad.tiered ? `${ad.qty} ${dict.hoursShort}` : `×${ad.qty}`}
+                        price={ad.price > 0 ? `${fmtMoney(ad.price)} ${dict.uah}` : dict.priceTBD}
                         onRemove={() => setAddonQty((q) => ({ ...q, [ad.id]: 0 }))}
                       />
                     ))}

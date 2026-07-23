@@ -110,7 +110,11 @@ model Addon {
   subUk    String  @default("")
   subRu    String  @default("")
   subEn    String  @default("")
+  // price 0 => "ціна уточнюється" (cake, merch)
   price    Int
+  // JSON map of qty->price for tiered addons (photographer hours):
+  // {"1":2500,"2":4000,"3":5500}. Empty = flat price*qty.
+  tiers    String  @default("")
   sortOrder Int    @default(0)
   active   Boolean @default(true)
   bookingAddons BookingAddon[]

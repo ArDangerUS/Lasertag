@@ -49,7 +49,13 @@ export type PubLocation = {
   sortOrder: number;
 };
 
-export type PubAddon = { id: string; name: string; sub: string; price: number };
+export type PubAddon = {
+  id: string;
+  name: string;
+  sub: string;
+  price: number; // 0 => "ціна уточнюється"
+  tiers: Record<string, number> | null; // qty -> price (photographer hours)
+};
 
 export type PubPackageItem = { activityId: string; durationMin: number; order: number; parallel: boolean };
 export type PubPackage = {
@@ -127,6 +133,7 @@ export async function loadPublicCatalog(locale: Locale): Promise<PublicCatalog> 
       name: localizedName(a, locale),
       sub: localizedSub(a, locale),
       price: a.price,
+      tiers: a.tiers ? (JSON.parse(a.tiers) as Record<string, number>) : null,
     })),
     packages: packages.map((p) => ({
       id: p.id,

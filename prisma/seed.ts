@@ -94,7 +94,10 @@ async function main() {
 
   // ---- addons ----
   for (const ad of ADDONS) {
-    await prisma.addon.create({ data: ad });
+    const { tiers, ...rest } = ad as typeof ad & { tiers?: Record<number, number> };
+    await prisma.addon.create({
+      data: { ...rest, tiers: tiers ? JSON.stringify(tiers) : "" },
+    });
   }
   console.log(`  ${ADDONS.length} addons`);
 

@@ -64,6 +64,21 @@ export function resolvePrice(
   return weekend ? best.r.priceWeekend : best.r.priceWeekday;
 }
 
+// Price for a merged block of a duration-flexible activity (30-min slots that
+// the customer stacked). Decomposes into hours + a leftover half-hour:
+//   60 → price60; 90 → price60 + price30; 120 → 2×price60; 30 → price30.
+export function tieredBlockPrice(
+  rows: PriceRow[],
+  opts: { locationId: string; date: string; durationMin: number }
+): number {
+  const p30 = resolvePrice(rows, { locationId: opts.locationId, durationMin: 30, date: opts.date });
+  const p60 = resolvePrice(rows, { locationId: opts.locationId, durationMin: 60, date: opts.date });
+  const hour = p60 ?? (p30 != null ? p30 * 2 : 0);
+  const half = p30 ?? Math.round(hour / 2);
+  const halves = Math.max(1, Math.round(opts.durationMin / 30));
+  return Math.floor(halves / 2) * hour + (halves % 2) * half;
+}
+
 // −40% on lasertag Mon–Thu, start 10:00–11:00, at every location except Gorodok.
 // Returns a multiplier (0.6 or 1). NOTE: applies to any lasertag starting in the
 // window regardless of 30/60 duration — confirm with the client if it should be
