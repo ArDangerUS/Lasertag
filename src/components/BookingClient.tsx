@@ -468,7 +468,7 @@ export default function BookingClient({
         {/* LEFT: logo (→ start screen) + brand name */}
         <div className="flex items-center gap-3">
           <Link href="/" aria-label={dict.brandName} className="shrink-0">
-            <G75Logo />
+            <BrandLogo />
           </Link>
           <div className="leading-tight">
             <div className="text-[17px] font-bold text-brand-green">{dict.brandName}</div>
@@ -478,18 +478,18 @@ export default function BookingClient({
         {/* RIGHT: contacts (Telegram / Viber / phone) then languages */}
         <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-2">
           <div className="flex items-center gap-2">
-            {/* TODO: replace "#" with the real Telegram link */}
             <a
-              href="#"
+              href="https://t.me/Lasertag_G75"
+              target="_blank"
+              rel="noreferrer"
               aria-label="Telegram"
               title="Telegram"
               className="flex h-8 w-8 items-center justify-center rounded-full bg-[#229ED9] text-white transition hover:opacity-90"
             >
               <TelegramGlyph />
             </a>
-            {/* TODO: replace "#" with the real Viber link */}
             <a
-              href="#"
+              href="viber://chat?number=%2B380994895161"
               aria-label="Viber"
               title="Viber"
               className="flex h-8 w-8 items-center justify-center rounded-full bg-[#7360F2] text-white transition hover:opacity-90"
@@ -1164,6 +1164,27 @@ function CartRow({
         </button>
       </div>
     </div>
+  );
+}
+
+// Real club logo from lasertag.in.ua, with the drawn emblem as fallback if the
+// remote image fails to load (their host is client-reachable, our server proxy
+// can't fetch it to bundle locally).
+const REMOTE_LOGO = "https://www.lasertag.in.ua/wp-content/uploads/2026/04/logo4.svg";
+
+function BrandLogo() {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <G75Logo />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={REMOTE_LOGO}
+      alt="Лазертаг G-75"
+      width={52}
+      height={52}
+      className="h-[52px] w-[52px] object-contain"
+      onError={() => setFailed(true)}
+    />
   );
 }
 
