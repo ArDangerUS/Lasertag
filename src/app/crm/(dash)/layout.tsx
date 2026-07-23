@@ -8,7 +8,10 @@ export const dynamic = "force-dynamic";
 
 export default async function DashLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/crm/login");
+  // Token may be cryptographically valid while the user no longer exists
+  // (fresh DB after db:reset). Go through /api/auth/clear to drop the stale
+  // cookie — a plain redirect to /crm/login would loop via the middleware.
+  if (!user) redirect("/api/auth/clear");
   const meta = ROLE_META[user.role];
 
   return (
