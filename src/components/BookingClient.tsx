@@ -753,17 +753,21 @@ export default function BookingClient({
                           ✓
                         </span>
                       </span>
-                      <span className="mt-1.5 block text-[12px] text-[#888]">
+                      <span className="mt-1.5 block text-[12px] leading-relaxed text-[#888]">
                         {a.durationOptions.length ? (
                           <>
-                            <span className="font-semibold text-[#666]">
-                              30 {dict.min} – {fmtMoney(priceFor(a, 30))}
+                            <span className="block">
+                              <span className="font-semibold text-[#666]">
+                                30 {dict.min} – {fmtMoney(priceFor(a, 30))}
+                              </span>{" "}
+                              {dict.uah} {a.perPerson ? dict.perPerson : dict.perGroup}
                             </span>
-                            <span className="mx-1.5 inline-block h-[11px] w-px translate-y-[1px] bg-[#d5d5d5] align-middle" />
-                            <span className="font-semibold text-[#666]">
-                              60 {dict.min} – {fmtMoney(priceFor(a, 60))}
-                            </span>{" "}
-                            {dict.uah} {a.perPerson ? dict.perPerson : dict.perGroup}
+                            <span className="block">
+                              <span className="font-semibold text-[#666]">
+                                60 {dict.min} – {fmtMoney(priceFor(a, 60))}
+                              </span>{" "}
+                              {dict.uah} {a.perPerson ? dict.perPerson : dict.perGroup}
+                            </span>
                           </>
                         ) : (
                           <>
