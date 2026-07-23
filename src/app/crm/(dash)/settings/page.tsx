@@ -12,7 +12,7 @@ export default async function SettingsPage() {
   const [activities, locations] = await Promise.all([
     prisma.activity.findMany({
       orderBy: { sortOrder: "asc" },
-      include: { prices: true },
+      include: { prices: true, locations: true },
     }),
     prisma.location.findMany({ orderBy: { sortOrder: "asc" } }),
   ]);
@@ -21,6 +21,7 @@ export default async function SettingsPage() {
 
   return (
     <SettingsClient
+      locations={locations.map((l) => ({ id: l.id, name: l.name }))}
       activities={activities.map((a) => ({
         id: a.id,
         key: a.key,
@@ -33,6 +34,7 @@ export default async function SettingsPage() {
         minPeople: a.minPeople,
         maxPeople: a.maxPeople,
         cleanupMin: a.cleanupMin,
+        locationIds: a.locations.map((x) => x.locationId),
         prices: a.prices.map((p) => ({
           id: p.id,
           locationName: p.locationId ? locName.get(p.locationId) ?? "—" : "Базова (усі локації)",

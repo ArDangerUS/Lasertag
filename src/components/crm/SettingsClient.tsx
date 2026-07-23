@@ -9,6 +9,8 @@ type Price = {
   priceWeekday: number;
   priceWeekend: number;
 };
+type Loc = { id: string; name: string };
+
 type Act = {
   id: string;
   key: string;
@@ -21,30 +23,40 @@ type Act = {
   minPeople: number;
   maxPeople: number;
   cleanupMin: number;
+  locationIds: string[];
   prices: Price[];
 };
 
-export default function SettingsClient({ activities }: { activities: Act[] }) {
+const UNLIMITED = 999; // maxPeople 999 = без обмежень
+
+export default function SettingsClient({
+  activities,
+  locations,
+}: {
+  activities: Act[];
+  locations: Loc[];
+}) {
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-card bg-[#161616] p-6">
         <h2 className="text-[18px] font-extrabold">Розваги і ціни</h2>
         <p className="text-[13px] text-[#888]">
-          Редагуйте ціни (будні / вихідні), назви трьома мовами, доступність та розмір груп. Кожна
-          зміна фіксується в журналі.
+          Редагуйте ціни (будні / вихідні), назви трьома мовами, доступність, локації та розмір
+          груп. Максимум «∞» = без обмежень. Кожна зміна фіксується в журналі.
         </p>
       </div>
       {activities.map((a) => (
-        <ActivityCard key={a.id} act={a} />
+        <ActivityCard key={a.id} act={a} locations={locations} />
       ))}
     </div>
   );
 }
 
-function ActivityCard({ act }: { act: Act }) {
+function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
   const [active, setActive] = useState(act.active);
   const [names, setNames] = useState({ uk: act.nameUk, ru: act.nameRu, en: act.nameEn });
   const [group, setGroup] = useState({ min: act.minPeople, max: act.maxPeople, cleanup: act.cleanupMin });
+  const [locIds, setLocIds] = useState<string[]>(act.locationIds);
   const [prices, setPrices] = useState(act.prices);
   const [savedFlash, setSavedFlash] = useState("");
   const [busy, setBusy] = useState(false);
@@ -82,9 +94,10 @@ function ActivityCard({ act }: { act: Act }) {
           nameUk: names.uk,
           nameRu: names.ru,
           nameEn: names.en,
-          minPeople: group.min,
-          maxPeople: group.max,
+          minPeople: Math.max(1, group.min),
+          maxPeople: Math.max(1, group.max),
           cleanupMin: group.cleanup,
+          locationIds: locIds,
         }),
       });
       if (!res.ok) throw new Error();
@@ -127,10 +140,73 @@ function ActivityCard({ act }: { act: Act }) {
         ))}
       </div>
 
+      {/* locations */}
+      <div className="mb-4">
+        <div className="mb-1.5 text-[11px] font-bold uppercase text-[#777]">Локації</div>
+        <div className="flex flex-wrap gap-2">
+          {locations.map((l) => {
+            const on = locIds.includes(l.id);
+            return (
+              <button
+                key={l.id}
+                onClick={() =>
+                  setLocIds((ids) => (on ? ids.filter((x) => x !== l.id) : [...ids, l.id]))
+                }
+                className="rounded-full px-3.5 py-1.5 text-[12px] font-semibold"
+                style={{
+                  background: on ? "#56EF02" : "#0e0e0e",
+                  color: on ? "#111" : "#bbb",
+                  border: `1px solid ${on ? "#56EF02" : "#333"}`,
+                }}
+              >
+                {l.name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* group / cleanup */}
       <div className="mb-4 grid grid-cols-3 gap-3">
-        <NumField label="Мін. учасників" value={group.min} onChange={(v) => setGroup((g) => ({ ...g, min: v }))} />
-        <NumField label="Макс. учасників" value={group.max} onChange={(v) => setGroup((g) => ({ ...g, max: v }))} />
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase text-[#777]">Мін. учасників</span>
+            <button
+              onClick={() => setGroup((g) => ({ ...g, min: 1 }))}
+              className="rounded-full bg-[#0e0e0e] px-2 py-0.5 text-[11px] font-bold text-[#56EF02]"
+              title="Без мінімуму"
+            >
+              1
+            </button>
+          </div>
+          <input
+            type="number"
+            value={group.min}
+            onChange={(e) => setGroup((g) => ({ ...g, min: Number(e.target.value) || 1 }))}
+            className="w-full rounded-lg border border-[#333] bg-[#0e0e0e] px-3 py-2 text-[14px] text-white"
+          />
+        </div>
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase text-[#777]">Макс. учасників</span>
+            <button
+              onClick={() => setGroup((g) => ({ ...g, max: UNLIMITED }))}
+              className="rounded-full bg-[#0e0e0e] px-2 py-0.5 text-[11px] font-bold text-[#56EF02]"
+              title="Без обмежень (999)"
+            >
+              ∞
+            </button>
+          </div>
+          <input
+            type="number"
+            value={group.max}
+            onChange={(e) => setGroup((g) => ({ ...g, max: Number(e.target.value) || UNLIMITED }))}
+            className="w-full rounded-lg border border-[#333] bg-[#0e0e0e] px-3 py-2 text-[14px] text-white"
+          />
+          {group.max >= UNLIMITED && (
+            <div className="mt-1 text-[11px] text-[#56EF02]">∞ без обмежень</div>
+          )}
+        </div>
         <NumField label="Перегрузка, хв" value={group.cleanup} onChange={(v) => setGroup((g) => ({ ...g, cleanup: v }))} />
       </div>
 

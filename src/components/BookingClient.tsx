@@ -752,9 +752,11 @@ export default function BookingClient({
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
                 {locActivities.map((a) => {
                   const on = !!chosen[a.id];
-                  const overMax = people > a.maxPeople;
-                  const rangeLabel =
-                    a.minPeople <= 1
+                  const unlimited = a.maxPeople >= 999; // 999 = без обмежень
+                  const overMax = !unlimited && people > a.maxPeople;
+                  const rangeLabel = unlimited
+                    ? ""
+                    : a.minPeople <= 1
                       ? dict.peopleUpTo.replace("{n}", String(a.maxPeople))
                       : dict.peopleRange
                           .replace("{a}", String(a.minPeople))
@@ -807,7 +809,9 @@ export default function BookingClient({
                             {a.perPerson ? dict.perPerson : dict.perGroup} · {a.durationMin} {dict.min}
                           </>
                         )}
-                        <span className="block text-[11px] text-[#a5a5a5]">{rangeLabel}</span>
+                        {rangeLabel && (
+                          <span className="block text-[11px] text-[#a5a5a5]">{rangeLabel}</span>
+                        )}
                         {overMax && (
                           <span className="mt-1 block text-[11px] font-bold text-[#b6791b]">
                             {dict.maxPeopleWarn.replace("{n}", String(a.maxPeople))}
@@ -962,7 +966,10 @@ export default function BookingClient({
                             ✓
                           </span>
                         </span>
-                        {ad.sub && <span className="mt-1 block text-[12px] text-[#888]">{ad.sub}</span>}
+                        {/* For tiered addons (photographer) the hint shows only once selected */}
+                        {ad.sub && (!ad.tiers || on) && (
+                          <span className="mt-1 block text-[12px] text-[#888]">{ad.sub}</span>
+                        )}
 
                         {/* Photographer hours stepper */}
                         {ad.tiers && on && (

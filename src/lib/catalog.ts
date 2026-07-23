@@ -108,8 +108,8 @@ export const ACTIVITIES: SeedActivity[] = [
     durationMin: 60,
     durationOptions: [30, 60],
     cleanupMin: 0,
-    minPeople: 4,
-    maxPeople: 30,
+    minPeople: 1,
+    maxPeople: 999,
     sortOrder: 1,
     locations: ALL,
     // Same lasertag prices for all locations. (10-min tariff 180/200 also exists
@@ -132,8 +132,8 @@ export const ACTIVITIES: SeedActivity[] = [
     perPerson: true,
     durationMin: 60,
     cleanupMin: 0,
-    minPeople: 6,
-    maxPeople: 20,
+    minPeople: 1,
+    maxPeople: 999,
     sortOrder: 2,
     locations: ALL,
     prices: [{ weekday: 950, weekend: 1000 }],
@@ -151,7 +151,7 @@ export const ACTIVITIES: SeedActivity[] = [
     perPerson: false,
     durationMin: 60,
     cleanupMin: 15, // 15–20 хв на перегрузку; у завантажені дні можна без зазору
-    minPeople: 2,
+    minPeople: 1,
     maxPeople: 10,
     sortOrder: 3,
     locations: ALL,
@@ -234,7 +234,7 @@ export const ACTIVITIES: SeedActivity[] = [
     durationOptions: [30, 60],
     cleanupMin: 0,
     minPeople: 1,
-    maxPeople: 15,
+    maxPeople: 999,
     sortOrder: 6,
     locations: ["gorodok"],
     prices: [
@@ -257,7 +257,7 @@ export const ACTIVITIES: SeedActivity[] = [
     durationOptions: [30, 60],
     cleanupMin: 0,
     minPeople: 1,
-    maxPeople: 15,
+    maxPeople: 999,
     sortOrder: 6,
     locations: ["gorodok"],
     prices: [
@@ -280,7 +280,7 @@ export const ACTIVITIES: SeedActivity[] = [
     durationOptions: [30, 60],
     cleanupMin: 0,
     minPeople: 1,
-    maxPeople: 20,
+    maxPeople: 999,
     sortOrder: 7,
     locations: ["gorodok"],
     prices: [
@@ -303,7 +303,7 @@ export const ACTIVITIES: SeedActivity[] = [
     durationOptions: [30, 60],
     cleanupMin: 0,
     minPeople: 1,
-    maxPeople: 15,
+    maxPeople: 999,
     sortOrder: 7,
     locations: ["gorodok"],
     prices: [
@@ -326,7 +326,7 @@ export const ACTIVITIES: SeedActivity[] = [
     durationOptions: [30, 60], // можна обирати 30 або 60 хв
     cleanupMin: 0,
     minPeople: 1,
-    maxPeople: 30,
+    maxPeople: 999,
     sortOrder: 8,
     locations: ALL,
     prices: [
@@ -348,7 +348,7 @@ export const ACTIVITIES: SeedActivity[] = [
     durationMin: 60,
     cleanupMin: 0,
     minPeople: 1,
-    maxPeople: 10,
+    maxPeople: 999,
     sortOrder: 9,
     locations: ["mobile"],
     prices: [{ weekday: 12000, weekend: 12000 }],
