@@ -75,7 +75,11 @@ async function main() {
 
     for (const slug of a.locations) {
       await prisma.locationActivity.create({
-        data: { locationId: locBySlug[slug], activityId: act.id },
+        data: {
+          locationId: locBySlug[slug],
+          activityId: act.id,
+          capacity: a.capacities?.[slug] ?? 1,
+        },
       });
     }
     for (const p of a.prices) {

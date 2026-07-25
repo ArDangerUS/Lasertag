@@ -62,7 +62,7 @@ const uk = {
   prepayNote: "Для підтвердження дати потрібен аванс 1000 грн (переказ на картку ФОП).",
   submitted: "Заявку надіслано!",
   submittedText:
-    "Ваш номер бронювання нижче. Натисніть «Підтвердити у Telegram», щоб ми одразу зв'язали заявку з вами. Або чекайте дзвінка на {phone}.",
+    "Дякуємо! Менеджер зв'яжеться з вами за номером {phone} для підтвердження бронювання.",
   confirmTelegram: "Підтвердити у Telegram",
   newBooking: "Нове бронювання",
   bookingCode: "Номер бронювання",
@@ -135,7 +135,7 @@ const ru: Dict = {
   prepayNote: "Для подтверждения даты нужен аванс 1000 грн (перевод на карту ФОП).",
   submitted: "Заявка отправлена!",
   submittedText:
-    "Ваш номер брони ниже. Нажмите «Подтвердить в Telegram», чтобы мы сразу связали заявку с вами. Или ждите звонка на {phone}.",
+    "Спасибо! Менеджер свяжется с вами по номеру {phone} для подтверждения бронирования.",
   confirmTelegram: "Подтвердить в Telegram",
   newBooking: "Новое бронирование",
   bookingCode: "Номер брони",
@@ -206,7 +206,7 @@ const en: Dict = {
   prepayNote: "A 1000 UAH prepayment (transfer to the FOP card) is required to confirm the date.",
   submitted: "Request sent!",
   submittedText:
-    "Your booking code is below. Tap “Confirm on Telegram” so we can link the request to you right away. Or wait for a call at {phone}.",
+    "Thank you! A manager will contact you at {phone} to confirm the booking.",
   confirmTelegram: "Confirm on Telegram",
   newBooking: "New booking",
   bookingCode: "Booking code",

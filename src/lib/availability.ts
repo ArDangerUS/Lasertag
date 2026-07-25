@@ -1,13 +1,9 @@
 import { prisma } from "./prisma";
 import { SLOT_STEP_MIN } from "./constants";
 
-// Capacity per activity at a location. Banquet rooms run in parallel; a single
-// arena runs one session at a time. This is intentionally simple and can be
-// tuned per business rule later.
-function capacityFor(activity: { category: string }, location: { banquetRooms: number }): number {
-  if (activity.category === "room") return Math.max(1, location.banquetRooms);
-  return 1;
-}
+// Capacity comes from LocationActivity.capacity — how many rooms/arenas the
+// activity has at that location (Городок: 2 лазертаг-арени, 7 банкетних
+// кімнат; Нивки: 2 банкетні зали; …). Editable in the CRM.
 
 export type BusyMap = Record<string, Set<number>>; // activityId -> set of busy start-minutes
 
@@ -43,7 +39,7 @@ export async function computeBusy(locationId: string, date: string): Promise<{
 
   for (const la of acts) {
     const activity = la.activity;
-    const cap = capacityFor(activity, location);
+    const cap = Math.max(1, la.capacity);
     const cleanup = activity.cleanupMin;
 
     // Build an occupancy count per minute-slot from existing items of this activity.

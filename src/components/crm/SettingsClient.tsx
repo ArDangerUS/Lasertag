@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 type Price = {
   id: string;
@@ -10,6 +11,7 @@ type Price = {
   priceWeekend: number;
 };
 type Loc = { id: string; name: string };
+type LocLink = { locationId: string; capacity: number };
 
 type Act = {
   id: string;
@@ -23,7 +25,7 @@ type Act = {
   minPeople: number;
   maxPeople: number;
   cleanupMin: number;
-  locationIds: string[];
+  locations: LocLink[];
   prices: Price[];
 };
 
@@ -36,14 +38,26 @@ export default function SettingsClient({
   activities: Act[];
   locations: Loc[];
 }) {
+  const [showCreate, setShowCreate] = useState(false);
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-card bg-[#161616] p-6">
-        <h2 className="text-[18px] font-extrabold">Розваги і ціни</h2>
-        <p className="text-[13px] text-[#888]">
-          Редагуйте ціни (будні / вихідні), назви трьома мовами, доступність, локації та розмір
-          груп. Максимум «∞» = без обмежень. Кожна зміна фіксується в журналі.
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex-1">
+            <h2 className="text-[18px] font-extrabold">Розваги і ціни</h2>
+            <p className="text-[13px] text-[#888]">
+              Ціни (будні / вихідні), назви 3 мовами, локації та кількість кімнат/арен на кожній
+              (скільки груп паралельно), розмір груп. «∞» = без обмежень. Кожна зміна — у журналі.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowCreate((s) => !s)}
+            className="rounded-full bg-[#56EF02] px-4 py-2.5 text-[13px] font-bold text-[#1A1A1A]"
+          >
+            {showCreate ? "Скасувати" : "+ Нова розвага"}
+          </button>
+        </div>
+        {showCreate && <CreateActivityForm locations={locations} onDone={() => setShowCreate(false)} />}
       </div>
       {activities.map((a) => (
         <ActivityCard key={a.id} act={a} locations={locations} />
@@ -52,7 +66,183 @@ export default function SettingsClient({
   );
 }
 
+/* ---------------- create form ---------------- */
+
+function CreateActivityForm({ locations, onDone }: { locations: Loc[]; onDone: () => void }) {
+  const router = useRouter();
+  const [nameUk, setNameUk] = useState("");
+  const [nameRu, setNameRu] = useState("");
+  const [nameEn, setNameEn] = useState("");
+  const [icon, setIcon] = useState("🎈");
+  const [category, setCategory] = useState<"game" | "show" | "room">("game");
+  const [perPerson, setPerPerson] = useState(false);
+  const [flexible, setFlexible] = useState(false);
+  const [durationMin, setDurationMin] = useState("60");
+  const [priceWeekday, setPriceWeekday] = useState("");
+  const [priceWeekend, setPriceWeekend] = useState("");
+  const [price30Weekday, setPrice30Weekday] = useState("");
+  const [price30Weekend, setPrice30Weekend] = useState("");
+  const [locs, setLocs] = useState<Record<string, number>>({}); // locationId -> capacity
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function create() {
+    setError("");
+    const wd = parseInt(priceWeekday, 10);
+    const we = parseInt(priceWeekend, 10);
+    if (!nameUk.trim()) return setError("Вкажіть назву (укр)");
+    if (!Number.isFinite(wd) || !Number.isFinite(we)) return setError("Вкажіть ціни (будні та вихідні)");
+    const chosen = Object.entries(locs);
+    if (!chosen.length) return setError("Оберіть хоча б одну локацію");
+    setBusy(true);
+    try {
+      const res = await fetch("/api/crm/activities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nameUk,
+          nameRu,
+          nameEn,
+          icon: icon || "🎈",
+          category,
+          perPerson,
+          flexible,
+          durationMin: parseInt(durationMin, 10) || 60,
+          priceWeekday: wd,
+          priceWeekend: we,
+          ...(flexible && price30Weekday !== "" ? { price30Weekday: parseInt(price30Weekday, 10) || 0 } : {}),
+          ...(flexible && price30Weekend !== "" ? { price30Weekend: parseInt(price30Weekend, 10) || 0 } : {}),
+          locations: chosen.map(([locationId, capacity]) => ({ locationId, capacity })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Помилка");
+      onDone();
+      router.refresh();
+    } catch (e: any) {
+      setError(e?.message || "Помилка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const inputCls = "w-full rounded-lg border border-[#333] bg-[#0e0e0e] px-3 py-2 text-[14px] text-white";
+
+  return (
+    <div className="mt-4 rounded-xl border border-[#2a2a2a] bg-[#0e0e0e] p-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <input placeholder="Назва (укр) *" value={nameUk} onChange={(e) => setNameUk(e.target.value)} className={inputCls} />
+        <input placeholder="Назва (рос)" value={nameRu} onChange={(e) => setNameRu(e.target.value)} className={inputCls} />
+        <input placeholder="Назва (англ)" value={nameEn} onChange={(e) => setNameEn(e.target.value)} className={inputCls} />
+        <div className="flex gap-2">
+          <input placeholder="🎈" value={icon} onChange={(e) => setIcon(e.target.value)} className={`${inputCls} w-16 text-center`} title="Іконка (емодзі)" />
+          <select value={category} onChange={(e) => setCategory(e.target.value as any)} className={inputCls}>
+            <option value="game">Розвага</option>
+            <option value="show">Шоу</option>
+            <option value="room">Кімната</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-4 text-[13px] text-[#ccc]">
+        <label className="flex cursor-pointer items-center gap-2">
+          <input type="checkbox" checked={perPerson} onChange={(e) => setPerPerson(e.target.checked)} />
+          ціна за людину (інакше — за компанію)
+        </label>
+        <label className="flex cursor-pointer items-center gap-2">
+          <input type="checkbox" checked={flexible} onChange={(e) => setFlexible(e.target.checked)} />
+          гнучка тривалість 30/60 хв (слоти з обʼєднанням)
+        </label>
+        {!flexible && (
+          <span className="flex items-center gap-2">
+            тривалість, хв:
+            <input type="number" value={durationMin} onChange={(e) => setDurationMin(e.target.value)} className={`${inputCls} w-20`} />
+          </span>
+        )}
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div>
+          <div className="mb-1 text-[11px] font-bold uppercase text-[#777]">{flexible ? "60 хв · будні" : "Ціна · будні"}</div>
+          <input type="number" value={priceWeekday} onChange={(e) => setPriceWeekday(e.target.value)} className={inputCls} />
+        </div>
+        <div>
+          <div className="mb-1 text-[11px] font-bold uppercase text-[#777]">{flexible ? "60 хв · вихідні" : "Ціна · вихідні"}</div>
+          <input type="number" value={priceWeekend} onChange={(e) => setPriceWeekend(e.target.value)} className={inputCls} />
+        </div>
+        {flexible && (
+          <>
+            <div>
+              <div className="mb-1 text-[11px] font-bold uppercase text-[#777]">30 хв · будні</div>
+              <input type="number" value={price30Weekday} onChange={(e) => setPrice30Weekday(e.target.value)} placeholder="½ від години" className={inputCls} />
+            </div>
+            <div>
+              <div className="mb-1 text-[11px] font-bold uppercase text-[#777]">30 хв · вихідні</div>
+              <input type="number" value={price30Weekend} onChange={(e) => setPrice30Weekend(e.target.value)} placeholder="½ від години" className={inputCls} />
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="mt-3">
+        <div className="mb-1.5 text-[11px] font-bold uppercase text-[#777]">Локації та кількість кімнат</div>
+        <div className="flex flex-wrap gap-2">
+          {locations.map((l) => {
+            const on = l.id in locs;
+            return (
+              <span key={l.id} className="flex items-center gap-1">
+                <button
+                  onClick={() =>
+                    setLocs((m) => {
+                      const next = { ...m };
+                      if (on) delete next[l.id];
+                      else next[l.id] = 1;
+                      return next;
+                    })
+                  }
+                  className="rounded-full px-3.5 py-1.5 text-[12px] font-semibold"
+                  style={{
+                    background: on ? "#56EF02" : "#161616",
+                    color: on ? "#111" : "#bbb",
+                    border: `1px solid ${on ? "#56EF02" : "#333"}`,
+                  }}
+                >
+                  {l.name}
+                </button>
+                {on && (
+                  <input
+                    type="number"
+                    min={1}
+                    value={locs[l.id]}
+                    onChange={(e) =>
+                      setLocs((m) => ({ ...m, [l.id]: Math.max(1, Number(e.target.value) || 1) }))
+                    }
+                    title="Кімнат/арен (паралельних груп)"
+                    className="w-14 rounded-lg border border-[#333] bg-[#161616] px-2 py-1 text-center text-[12px] text-white"
+                  />
+                )}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
+      {error && <div className="mt-3 text-[13px] text-[#ff8a5c]">{error}</div>}
+      <div className="mt-3 flex justify-end">
+        <button
+          onClick={create}
+          disabled={busy}
+          className="rounded-full bg-[#56EF02] px-5 py-2.5 text-[13px] font-bold text-[#1A1A1A] disabled:opacity-60"
+        >
+          {busy ? "Створення…" : "Створити розвагу"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
+  const router = useRouter();
   const [active, setActive] = useState(act.active);
   const [names, setNames] = useState({ uk: act.nameUk, ru: act.nameRu, en: act.nameEn });
   // Numeric fields are kept as strings so the user can clear them completely
@@ -63,7 +253,10 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
     max: String(act.maxPeople),
     cleanup: String(act.cleanupMin),
   });
-  const [locIds, setLocIds] = useState<string[]>(act.locationIds);
+  // locationId -> capacity (rooms/arenas at that location)
+  const [locCaps, setLocCaps] = useState<Record<string, number>>(
+    Object.fromEntries(act.locations.map((l) => [l.locationId, l.capacity]))
+  );
   const [prices, setPrices] = useState(
     act.prices.map((p) => ({ ...p, wdStr: String(p.priceWeekday), weStr: String(p.priceWeekend) }))
   );
@@ -124,7 +317,10 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
           minPeople: min,
           maxPeople: max,
           cleanupMin: cleanup,
-          locationIds: locIds,
+          locations: Object.entries(locCaps).map(([locationId, capacity]) => ({
+            locationId,
+            capacity,
+          })),
         }),
       });
       if (!res.ok) throw new Error();
@@ -134,6 +330,20 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
     } catch {
       flash("Помилка");
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeActivity() {
+    if (!confirm(`Видалити розвагу «${act.nameUk}»? Дію буде записано в журнал.`)) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/crm/activities/${act.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Помилка");
+      router.refresh();
+    } catch (e: any) {
+      alert(e?.message || "Помилка");
       setBusy(false);
     }
   }
@@ -169,27 +379,47 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
         ))}
       </div>
 
-      {/* locations */}
+      {/* locations + rooms count */}
       <div className="mb-4">
-        <div className="mb-1.5 text-[11px] font-bold uppercase text-[#777]">Локації</div>
+        <div className="mb-1.5 text-[11px] font-bold uppercase text-[#777]">
+          Локації · кімнат/арен (груп паралельно)
+        </div>
         <div className="flex flex-wrap gap-2">
           {locations.map((l) => {
-            const on = locIds.includes(l.id);
+            const on = l.id in locCaps;
             return (
-              <button
-                key={l.id}
-                onClick={() =>
-                  setLocIds((ids) => (on ? ids.filter((x) => x !== l.id) : [...ids, l.id]))
-                }
-                className="rounded-full px-3.5 py-1.5 text-[12px] font-semibold"
-                style={{
-                  background: on ? "#56EF02" : "#0e0e0e",
-                  color: on ? "#111" : "#bbb",
-                  border: `1px solid ${on ? "#56EF02" : "#333"}`,
-                }}
-              >
-                {l.name}
-              </button>
+              <span key={l.id} className="flex items-center gap-1">
+                <button
+                  onClick={() =>
+                    setLocCaps((m) => {
+                      const next = { ...m };
+                      if (on) delete next[l.id];
+                      else next[l.id] = 1;
+                      return next;
+                    })
+                  }
+                  className="rounded-full px-3.5 py-1.5 text-[12px] font-semibold"
+                  style={{
+                    background: on ? "#56EF02" : "#0e0e0e",
+                    color: on ? "#111" : "#bbb",
+                    border: `1px solid ${on ? "#56EF02" : "#333"}`,
+                  }}
+                >
+                  {l.name}
+                </button>
+                {on && (
+                  <input
+                    type="number"
+                    min={1}
+                    value={locCaps[l.id]}
+                    onChange={(e) =>
+                      setLocCaps((m) => ({ ...m, [l.id]: Math.max(1, Number(e.target.value) || 1) }))
+                    }
+                    title="Кімнат/арен на цій локації"
+                    className="w-14 rounded-lg border border-[#333] bg-[#0e0e0e] px-2 py-1 text-center text-[12px] text-white"
+                  />
+                )}
+              </span>
             );
           })}
         </div>
@@ -322,7 +552,14 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
         </table>
       </div>
 
-      <div className="mt-4 flex justify-end">
+      <div className="mt-4 flex items-center justify-between">
+        <button
+          onClick={removeActivity}
+          disabled={busy}
+          className="rounded-full border border-[#5a2222] px-4 py-2.5 text-[13px] font-bold text-[#ff7a7a] hover:bg-[#2a1414]"
+        >
+          Видалити
+        </button>
         <button
           onClick={saveActivity}
           disabled={busy}

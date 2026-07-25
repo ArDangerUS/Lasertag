@@ -34,7 +34,7 @@ export default async function SettingsPage() {
         minPeople: a.minPeople,
         maxPeople: a.maxPeople,
         cleanupMin: a.cleanupMin,
-        locationIds: a.locations.map((x) => x.locationId),
+        locations: a.locations.map((x) => ({ locationId: x.locationId, capacity: x.capacity })),
         prices: a.prices.map((p) => ({
           id: p.id,
           locationName: p.locationId ? locName.get(p.locationId) ?? "—" : "Базова (усі локації)",

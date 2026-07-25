@@ -4,7 +4,6 @@ import { useState } from "react";
 import type { CrmBooking, CrmCatalog } from "@/lib/crm-data";
 import { STATUS_META, BOOKING_STATUSES, type BookingStatus } from "@/lib/constants";
 import { fmtMoney, minToHHMM } from "@/lib/pricing";
-import { confirmDeepLink } from "@/lib/telegram-links";
 import Modal from "./Modal";
 
 export default function BookingEditor({
@@ -77,8 +76,6 @@ export default function BookingEditor({
       setSaving(false);
     }
   }
-
-  const tgUrl = process.env.NEXT_PUBLIC_TELEGRAM_URL || "https://t.me/g75lasertag_bot";
 
   return (
     <Modal onClose={onClose} title={`Бронь ${booking.code}`}>
@@ -206,14 +203,6 @@ export default function BookingEditor({
         {error && <div className="text-center text-[13px] text-[#ff8a5c]">{error}</div>}
 
         <div className="flex items-center gap-2">
-          <a
-            href={confirmDeepLink(tgUrl, booking.code)}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-full bg-[#2aabee] px-4 py-2.5 text-[13px] font-bold text-white"
-          >
-            Написати в Telegram
-          </a>
           {canWrite && (
             <button
               onClick={remove}

@@ -28,8 +28,10 @@ export type SeedActivity = {
   minPeople: number;
   maxPeople: number;
   sortOrder: number;
-  // Locations where this activity is offered (slugs). "*" = all non-mobile.
+  // Locations where this activity is offered (slugs).
   locations: string[];
+  // Rooms/arenas per location (parallel groups). Default 1.
+  capacities?: Record<string, number>;
   prices: SeedPrice[];
 };
 
@@ -78,17 +80,6 @@ export const LOCATIONS = [
     hasShowRoom: false,
     sortOrder: 4,
   },
-  {
-    slug: "mobile",
-    name: "Виїзний формат",
-    address: "Ваша адреса у межах Києва та області",
-    openMin: 9 * 60,
-    closeMin: 22 * 60,
-    isMobile: true,
-    banquetRooms: 0,
-    hasShowRoom: false,
-    sortOrder: 5,
-  },
 ];
 
 const ALL = ["nyvky", "gorodok", "new-way", "dream-yellow"];
@@ -112,6 +103,8 @@ export const ACTIVITIES: SeedActivity[] = [
     maxPeople: 999,
     sortOrder: 1,
     locations: ALL,
+    // Городок: велика арена ділиться на дві — дві гри паралельно.
+    capacities: { gorodok: 2 },
     // Same lasertag prices for all locations. (10-min tariff 180/200 also exists
     // but the calendar offers 30/60; can be added later if needed.)
     prices: [
@@ -329,29 +322,14 @@ export const ACTIVITIES: SeedActivity[] = [
     maxPeople: 999,
     sortOrder: 8,
     locations: ALL,
+    // Кількість банкетних кімнат: Нивки 2 (космос мала/велика), New Way 3
+    // (космос, каюта, майнкрафт), Дрім 1, Городок 7 (космос, 2 каюти,
+    // майнкрафт, динозаври, аватар, Гаррі Поттер).
+    capacities: { nyvky: 2, "new-way": 3, "dream-yellow": 1, gorodok: 7 },
     prices: [
       { durationMin: 30, weekday: 500, weekend: 500 },
       { durationMin: 60, weekday: 1000, weekend: 1000 },
     ],
-  },
-  {
-    key: "mobile-laser",
-    category: "game",
-    nameUk: "Виїзний лазертаг",
-    nameRu: "Выездной лазертаг",
-    nameEn: "Mobile lasertag",
-    descUk: "до 10 осіб включно (+10% за дод. учасника) + дорога",
-    descRu: "до 10 человек (+10% за доп. участника) + дорога",
-    descEn: "up to 10 people (+10% per extra) + travel",
-    icon: "🚐",
-    perPerson: false,
-    durationMin: 60,
-    cleanupMin: 0,
-    minPeople: 1,
-    maxPeople: 999,
-    sortOrder: 9,
-    locations: ["mobile"],
-    prices: [{ weekday: 12000, weekend: 12000 }],
   },
 ];
 

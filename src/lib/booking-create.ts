@@ -70,29 +70,46 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
         priceWeekday: p.priceWeekday,
         priceWeekend: p.priceWeekend,
       }));
-      if (act.durationOptions) {
-        // Flexible 30-min-slot activity: merged blocks price as hours + half.
-        unit = tieredBlockPrice(rows, {
-          locationId: input.locationId,
-          date: input.date,
-          durationMin: it.durationMin,
-        });
-      } else {
-        unit =
-          resolvePrice(rows, {
-            locationId: input.locationId,
-            durationMin: null,
-            date: input.date,
-          }) ?? 0;
-      }
-      // Weekday-morning lasertag discount (mirrors the client).
       const factor = lasertagMorningDiscount({
         activityKey: act.key,
         locationSlug: location.slug,
         date: input.date,
         startMin: it.startMin,
+        durationMin: it.durationMin,
       });
-      unit = Math.round(unit * factor);
+      if (act.durationOptions) {
+        // Flexible 30-min-slot activity: merged blocks price as hours + half.
+        if (factor < 1 && it.durationMin > 60) {
+          // Discount covers only the first hour (10:00–11:00); the remainder
+          // is priced normally.
+          const firstHour = tieredBlockPrice(rows, {
+            locationId: input.locationId,
+            date: input.date,
+            durationMin: 60,
+          });
+          const rest = tieredBlockPrice(rows, {
+            locationId: input.locationId,
+            date: input.date,
+            durationMin: it.durationMin - 60,
+          });
+          unit = Math.round(firstHour * factor) + rest;
+        } else {
+          const base = tieredBlockPrice(rows, {
+            locationId: input.locationId,
+            date: input.date,
+            durationMin: it.durationMin,
+          });
+          unit = Math.round(base * factor);
+        }
+      } else {
+        const base =
+          resolvePrice(rows, {
+            locationId: input.locationId,
+            durationMin: null,
+            date: input.date,
+          }) ?? 0;
+        unit = Math.round(base * factor);
+      }
     }
     const price = it.price != null ? it.price : act.perPerson ? unit * it.people : unit;
     return {

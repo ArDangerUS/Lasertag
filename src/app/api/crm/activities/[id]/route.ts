@@ -14,8 +14,11 @@ const schema = z.object({
   minPeople: z.number().int().min(1).max(999).optional(),
   maxPeople: z.number().int().min(1).max(999).optional(), // 999 = без обмежень
   cleanupMin: z.number().int().min(0).max(120).optional(),
-  // Full replacement list of locations where the activity is offered.
-  locationIds: z.array(z.string()).optional(),
+  // Full replacement list of locations where the activity is offered, with
+  // rooms/arenas count (capacity = parallel groups at that location).
+  locations: z
+    .array(z.object({ locationId: z.string(), capacity: z.number().int().min(1).max(50).default(1) }))
+    .optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -69,27 +72,46 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (parsed.data.active != null && parsed.data.active !== before.active)
     changes.push(parsed.data.active ? "увімкнено" : "вимкнено");
 
-  // Replace location links if a list was provided; report added/removed only.
-  if (parsed.data.locationIds) {
+  // Replace location links if a list was provided; report added/removed/capacity.
+  if (parsed.data.locations) {
+    const wanted = parsed.data.locations;
     const valid = await prisma.location.findMany({
-      where: { id: { in: parsed.data.locationIds } },
+      where: { id: { in: wanted.map((w) => w.locationId) } },
       select: { id: true, name: true },
     });
-    const beforeIds = new Set(before.locations.map((l) => l.locationId));
-    const afterIds = new Set(valid.map((l) => l.id));
-    const added = valid.filter((l) => !beforeIds.has(l.id)).map((l) => l.name);
-    const removed = before.locations
-      .filter((l) => !afterIds.has(l.locationId))
-      .map((l) => l.location.name);
-    if (added.length || removed.length) {
+    const validIds = new Set(valid.map((l) => l.id));
+    const nameOf = new Map(valid.map((l) => [l.id, l.name]));
+    const beforeCap = new Map(before.locations.map((l) => [l.locationId, l.capacity]));
+    const afterCap = new Map(
+      wanted.filter((w) => validIds.has(w.locationId)).map((w) => [w.locationId, w.capacity])
+    );
+
+    const added = [...afterCap.keys()].filter((id) => !beforeCap.has(id));
+    const removed = [...beforeCap.keys()].filter((id) => !afterCap.has(id));
+    const capChanged = [...afterCap.keys()].filter(
+      (id) => beforeCap.has(id) && beforeCap.get(id) !== afterCap.get(id)
+    );
+
+    if (added.length || removed.length || capChanged.length) {
       await prisma.locationActivity.deleteMany({ where: { activityId: params.id } });
-      for (const loc of valid) {
+      for (const [locationId, capacity] of afterCap) {
         await prisma.locationActivity.create({
-          data: { activityId: params.id, locationId: loc.id },
+          data: { activityId: params.id, locationId, capacity },
         });
       }
-      if (added.length) changes.push(`додано локації: ${added.join(", ")}`);
-      if (removed.length) changes.push(`прибрано локації: ${removed.join(", ")}`);
+      if (added.length)
+        changes.push(`додано локації: ${added.map((id) => nameOf.get(id)).join(", ")}`);
+      if (removed.length)
+        changes.push(
+          `прибрано локації: ${removed
+            .map((id) => before.locations.find((l) => l.locationId === id)?.location.name)
+            .join(", ")}`
+        );
+      for (const id of capChanged) {
+        changes.push(
+          `кімнат у «${nameOf.get(id)}»: ${beforeCap.get(id)} → ${afterCap.get(id)}`
+        );
+      }
     }
   }
 
@@ -119,4 +141,46 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   return NextResponse.json({ ok: true, changed: changes.length });
+}
+
+// Delete an activity. Blocked if bookings or packages reference it — then the
+// right move is to hide it (active=false) so history stays intact.
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const user = await getCurrentUser();
+  if (!user || !can(user.role, "editCatalog")) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+  const act = await prisma.activity.findUnique({
+    where: { id: params.id },
+    include: { _count: { select: { bookingItems: true, packageItems: true } } },
+  });
+  if (!act) return NextResponse.json({ error: "Не знайдено" }, { status: 404 });
+
+  if (act._count.bookingItems > 0) {
+    return NextResponse.json(
+      { error: `«${act.nameUk}» має ${act._count.bookingItems} броней — вимкніть її (Прихована) замість видалення, щоб не втратити історію.` },
+      { status: 400 }
+    );
+  }
+  if (act._count.packageItems > 0) {
+    return NextResponse.json(
+      { error: `«${act.nameUk}» входить до комплексних пропозицій — спершу приберіть її з комплексів.` },
+      { status: 400 }
+    );
+  }
+
+  await prisma.activityPrice.deleteMany({ where: { activityId: params.id } });
+  await prisma.locationActivity.deleteMany({ where: { activityId: params.id } });
+  await prisma.activity.delete({ where: { id: params.id } });
+
+  await audit({
+    actor: user,
+    action: "DELETE",
+    entity: "Activity",
+    entityId: params.id,
+    summary: `Видалено розвагу «${act.nameUk}»`,
+    before: { nameUk: act.nameUk, key: act.key },
+  });
+
+  return NextResponse.json({ ok: true });
 }

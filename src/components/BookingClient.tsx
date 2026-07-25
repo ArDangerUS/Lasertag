@@ -14,7 +14,6 @@ import {
   minToHHMM,
   lasertagMorningDiscount,
 } from "@/lib/pricing";
-import { confirmDeepLink } from "@/lib/telegram-links";
 
 type Pick = { activityId: string; startMin: number };
 
@@ -319,6 +318,7 @@ export default function BookingClient({
         locationSlug: location.slug,
         date,
         startMin,
+        durationMin,
       });
       const base = a.durationOptions.length
         ? tieredBlockPrice(priceRowsOf(a), { locationId, date, durationMin })
@@ -359,17 +359,18 @@ export default function BookingClient({
       // flexible: merge consecutive 30-min slots
       const emit = (start: number, slots: number[]) => {
         const end = start + slots.length * 30;
-        // If the block starts inside the −40% window (Mon–Thu 10:00–11:00) but
-        // runs past 11:00, split it so the discounted and regular parts are
-        // shown as two separate lines.
-        const discountedAtStart =
+        // The −40% hour (10:00–11:00, Mon–Thu) applies only to the full hour.
+        // A longer block starting at 10:00 is split so the discounted hour and
+        // the regular remainder show as two separate lines.
+        const discountedHour =
           lasertagMorningDiscount({
             activityKey: a.key,
             locationSlug: location.slug,
             date,
             startMin: start,
+            durationMin: Math.min(end, 660) - start,
           }) < 1;
-        if (discountedAtStart && end > 660) {
+        if (discountedHour && end > 660) {
           const before = slots.filter((s) => s < 660);
           const after = slots.filter((s) => s >= 660);
           pushBlock(a, start, before.length * 30, before);
@@ -1037,23 +1038,9 @@ export default function BookingClient({
                 <p className="mx-auto mt-2.5 max-w-[280px] text-[14px] leading-relaxed text-[#aaa]">
                   {dict.submittedText.replace("{phone}", customerPhone)}
                 </p>
-                <div className="mt-4 rounded-xl bg-[#1d1d1d] px-4 py-3">
-                  <div className="text-[12px] text-[#888]">{dict.bookingCode}</div>
-                  <div className="text-lg font-extrabold tracking-widest text-[#56EF02]">
-                    {result.code}
-                  </div>
-                </div>
-                <a
-                  href={confirmDeepLink(telegramUrl, result.code)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-4 block rounded-full bg-[#2aabee] px-5 py-3 text-[15px] font-bold text-white"
-                >
-                  {dict.confirmTelegram}
-                </a>
                 <button
                   onClick={reset}
-                  className="mt-3 rounded-full border border-[#444] px-5 py-2.5 text-[13px] font-semibold text-white"
+                  className="mt-5 rounded-full border border-[#444] px-5 py-2.5 text-[13px] font-semibold text-white"
                 >
                   {dict.newBooking}
                 </button>

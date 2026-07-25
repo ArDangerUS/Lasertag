@@ -9,9 +9,28 @@ export function isWeekendDate(iso: string): boolean {
   return day === 5 || day === 6 || day === 0;
 }
 
+// Orthodox (Julian-calendar) Easter converted to the Gregorian date, valid for
+// 1900–2099. Meeus algorithm + 13-day Julian→Gregorian offset.
+export function orthodoxEasterISO(year: number): string {
+  const a = year % 4;
+  const b = year % 7;
+  const c = year % 19;
+  const d = (19 * c + 15) % 30;
+  const e = (2 * a + 4 * b - d + 34) % 7;
+  const month = Math.floor((d + e + 114) / 31); // Julian month
+  const day = ((d + e + 114) % 31) + 1; // Julian day
+  const dt = new Date(year, month - 1, day + 13, 12); // +13 днів → григоріанська
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(
+    dt.getDate()
+  ).padStart(2, "0")}`;
+}
+
 export function isHolidayDate(iso: string): boolean {
   const mmdd = iso.slice(5); // "MM-DD"
-  return HOLIDAY_MMDD.includes(mmdd);
+  if (HOLIDAY_MMDD.includes(mmdd)) return true;
+  // Пасха — рухома дата
+  const year = Number(iso.slice(0, 4));
+  return iso === orthodoxEasterISO(year);
 }
 
 // Holidays are charged at the weekend (higher) rate.
@@ -79,21 +98,21 @@ export function tieredBlockPrice(
   return Math.floor(halves / 2) * hour + (halves % 2) * half;
 }
 
-// −40% on lasertag Mon–Thu, start 10:00–11:00, at every location except Gorodok.
-// Returns a multiplier (0.6 or 1). NOTE: applies to any lasertag starting in the
-// window regardless of 30/60 duration — confirm with the client if it should be
-// limited to a specific duration.
+// −40% on lasertag Mon–Thu at every location except Gorodok — ONLY for the
+// full 10:00–11:00 hour (client: «виключно на годину»). 30-min bookings in
+// that window are not discounted. Returns a multiplier (0.6 or 1).
 export function lasertagMorningDiscount(opts: {
   activityKey: string;
   locationSlug: string;
   date: string;
   startMin: number;
+  durationMin: number;
 }): number {
   if (opts.activityKey !== "laser") return 1;
   if (opts.locationSlug === "gorodok") return 1;
   const day = new Date(opts.date + "T12:00:00").getDay(); // 1..4 = Mon..Thu
   if (day < 1 || day > 4) return 1;
-  if (opts.startMin >= 600 && opts.startMin < 660) return 0.6; // 10:00–11:00
+  if (opts.startMin === 600 && opts.durationMin >= 60) return 0.6; // рівно з 10:00, від години
   return 1;
 }
 

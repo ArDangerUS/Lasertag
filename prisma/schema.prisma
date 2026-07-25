@@ -73,14 +73,17 @@ model Activity {
   updatedAt DateTime @updatedAt
 }
 
-// Join: which activities are offered at which location (+ optional per-location
-// availability toggle). Prices live in ActivityPrice keyed by location.
+// Join: which activities are offered at which location. `capacity` = how many
+// rooms/arenas this activity has at the location, i.e. how many groups can run
+// it in parallel (Городок: 2 лазертаг-арени, 7 банкетних кімнат; Нивки: 2
+// банкетні зали; тощо). Prices live in ActivityPrice keyed by location.
 model LocationActivity {
   id         String   @id @default(cuid())
   location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
   locationId String
   activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
   activityId String
+  capacity   Int      @default(1)
   active     Boolean  @default(true)
 
   @@unique([locationId, activityId])
