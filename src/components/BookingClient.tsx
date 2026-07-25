@@ -1258,27 +1258,29 @@ function Field({
   );
 }
 
-// Photo for an activity card. Uses Activity.photo if set in the DB, otherwise
-// looks for public/activities/<key>.jpg by convention — drop a file there and
-// it appears automatically. Hidden entirely when neither exists.
+// Photo for an activity card. Tries Activity.photo from the DB first, then
+// public/activities/<key>.jpg / .jpeg / .png / .webp by convention — drop a
+// file there and it appears automatically. Hidden when nothing exists.
 function ActivityPhoto({ photo, actKey, alt }: { photo: string; actKey: string; alt: string }) {
-  const [state, setState] = useState<"loading" | "ok" | "none">("loading");
-  const [src, setSrc] = useState(photo || `/activities/${actKey}.jpg`);
-  if (state === "none") return null;
+  const candidates = useMemo(() => {
+    const arr: string[] = [];
+    if (photo) arr.push(photo);
+    for (const ext of ["jpg", "jpeg", "png", "webp"]) arr.push(`/activities/${actKey}.${ext}`);
+    return arr;
+  }, [photo, actKey]);
+  const [idx, setIdx] = useState(0);
+  const [ok, setOk] = useState(false);
+  if (idx >= candidates.length) return null;
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={src}
+      src={candidates[idx]}
       alt={alt}
-      className={`mb-2 h-28 w-full rounded-xl object-cover ${state === "ok" ? "" : "hidden"}`}
-      onLoad={() => setState("ok")}
+      className={`mb-2 h-28 w-full rounded-xl object-cover ${ok ? "" : "hidden"}`}
+      onLoad={() => setOk(true)}
       onError={() => {
-        // if the DB photo failed, try the convention path once
-        if (photo && src === photo) {
-          setSrc(`/activities/${actKey}.jpg`);
-          return;
-        }
-        setState("none");
+        setOk(false);
+        setIdx((i) => i + 1);
       }}
     />
   );

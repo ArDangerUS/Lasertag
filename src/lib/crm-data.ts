@@ -76,6 +76,8 @@ export type CrmCatalog = {
     durationMin: number;
     durationOptions: number[];
     locationIds: string[];
+    // rooms/arenas per location (parallel groups)
+    capacityByLocation: Record<string, number>;
   }[];
   addons: { id: string; name: string; price: number }[];
 };
@@ -108,6 +110,7 @@ export async function loadCrmCatalog(): Promise<CrmCatalog> {
       durationMin: a.durationMin,
       durationOptions: a.durationOptions ? (JSON.parse(a.durationOptions) as number[]) : [],
       locationIds: a.locations.map((x) => x.locationId),
+      capacityByLocation: Object.fromEntries(a.locations.map((x) => [x.locationId, x.capacity])),
     })),
     addons: addons.map((a) => ({ id: a.id, name: a.nameUk, price: a.price })),
   };

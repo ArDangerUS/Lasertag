@@ -383,7 +383,17 @@ function DayView({
         <Stat label="Нові / непідтверджені" value={String(unconfirmed)} accent="#f5a623" />
       </div>
 
-      {/* grid */}
+      {/* Single location selected → columns per activity with free-room counts */}
+      {locations.length === 1 ? (
+        <ActivityDayGrid
+          location={locations[0]}
+          catalog={catalog}
+          bookings={bookings.filter((b) => b.locationId === locations[0].id)}
+          canWrite={canWrite}
+          onOpen={onOpen}
+          onCreate={onCreate}
+        />
+      ) : (
       <div className="overflow-x-auto rounded-card bg-white thin-scroll">
         <div style={{ minWidth: Math.max(700, 64 + locations.length * 220) }}>
           <div
@@ -434,7 +444,153 @@ function DayView({
           ))}
         </div>
       </div>
+      )}
     </div>
+  );
+}
+
+/* Occupancy grid for ONE location: columns = its activities, each cell shows
+   the bookings of that activity in that hour + how many rooms remain free. */
+function ActivityDayGrid({
+  location,
+  catalog,
+  bookings,
+  canWrite,
+  onOpen,
+  onCreate,
+}: {
+  location: CrmCatalog["locations"][number];
+  catalog: CrmCatalog;
+  bookings: CrmBooking[];
+  canWrite: boolean;
+  onOpen: (b: CrmBooking) => void;
+  onCreate: (locationId: string, startMin: number) => void;
+}) {
+  const acts = useMemo(
+    () => catalog.activities.filter((a) => a.locationIds.includes(location.id)),
+    [catalog.activities, location.id]
+  );
+
+  // Every booking item paired with its booking (a booking may span activities).
+  const entries = useMemo(() => {
+    const list: { b: CrmBooking; it: CrmBooking["items"][number] }[] = [];
+    bookings.forEach((b) => b.items.forEach((it) => list.push({ b, it })));
+    return list;
+  }, [bookings]);
+
+  return (
+    <div className="overflow-x-auto rounded-card bg-white thin-scroll">
+      <div style={{ minWidth: Math.max(700, 64 + acts.length * 170) }}>
+        <div
+          className="grid"
+          style={{ gridTemplateColumns: `64px repeat(${acts.length}, minmax(0, 1fr))` }}
+        >
+          <div />
+          {acts.map((a) => {
+            const cap = a.capacityByLocation[location.id] ?? 1;
+            return (
+              <div key={a.id} className="min-w-0 p-2 text-center">
+                <div className="rounded-xl bg-[#111] px-2 py-2 text-white">
+                  <div className="truncate text-[12px] font-bold" title={a.name}>
+                    {a.icon} {a.name}
+                  </div>
+                  <div className="text-[11px] text-[#888]">
+                    {cap > 1 ? `${cap} кімнат/арен` : "1 кімната"}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {HOURS.map((h) => (
+          <div
+            key={h}
+            className="grid border-t border-[#f0f0f0]"
+            style={{ gridTemplateColumns: `64px repeat(${acts.length}, minmax(0, 1fr))`, minHeight: 64 }}
+          >
+            <div className="flex items-start justify-end pr-2 pt-2 text-[12px] font-semibold text-[#999]">
+              {h}:00
+            </div>
+            {acts.map((a) => {
+              const cap = a.capacityByLocation[location.id] ?? 1;
+              // chips are rendered in the hour they START in
+              const startingHere = entries.filter(
+                (e) => e.it.activityId === a.id && Math.floor(e.it.startMin / 60) === h && e.b.status !== "CANCELLED"
+              );
+              const cancelledHere = entries.filter(
+                (e) => e.it.activityId === a.id && Math.floor(e.it.startMin / 60) === h && e.b.status === "CANCELLED"
+              );
+              // occupancy = max concurrent sessions over the two half-hours
+              const busyAt = (m: number) =>
+                entries.filter(
+                  (e) =>
+                    e.it.activityId === a.id &&
+                    e.b.status !== "CANCELLED" &&
+                    e.it.startMin <= m &&
+                    e.it.startMin + e.it.durationMin > m
+                ).length;
+              const maxBusy = Math.max(busyAt(h * 60), busyAt(h * 60 + 30));
+              const free = Math.max(0, cap - maxBusy);
+              return (
+                <div key={a.id} className="min-w-0 overflow-hidden border-l border-[#f4f4f4] p-1.5">
+                  <div className="flex h-full flex-col gap-1.5">
+                    {[...startingHere, ...cancelledHere].map(({ b, it }) => (
+                      <ItemChip key={it.id} b={b} it={it} onClick={() => onOpen(b)} />
+                    ))}
+                    {free > 0 && canWrite && (
+                      <button
+                        onClick={() => onCreate(location.id, h * 60)}
+                        className={`flex w-full flex-1 items-center justify-center gap-1 rounded-lg text-[11px] font-semibold ${
+                          maxBusy > 0
+                            ? "min-h-[24px] bg-[#f0fbe8] text-[#56b800]"
+                            : "min-h-[52px] bg-[#fafafa] text-[#ccc] hover:bg-[#f0fbe8] hover:text-[#56b800]"
+                        }`}
+                        title="Додати бронь"
+                      >
+                        {maxBusy > 0 ? `+ вільно ${free}/${cap}` : cap > 1 ? `+ · ${cap} вільно` : "+"}
+                      </button>
+                    )}
+                    {free === 0 && (
+                      <div className="rounded-lg bg-[#fdecec] px-2 py-1 text-center text-[10px] font-bold text-[#c05252]">
+                        зайнято {maxBusy}/{cap}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* Chip for a single booking ITEM (used in the per-activity grid). */
+function ItemChip({
+  b,
+  it,
+  onClick,
+}: {
+  b: CrmBooking;
+  it: CrmBooking["items"][number];
+  onClick: () => void;
+}) {
+  const meta = STATUS_META[b.status as BookingStatus] ?? STATUS_META.NEW;
+  const cancelled = b.status === "CANCELLED";
+  return (
+    <button
+      onClick={onClick}
+      className="w-full min-w-0 overflow-hidden rounded-lg px-2 py-1.5 text-left"
+      style={{ background: cancelled ? "#f3f3f3" : tint(meta.color), borderLeft: `3px solid ${meta.color}` }}
+    >
+      <div className={`truncate text-[12px] font-bold ${cancelled ? "text-[#999] line-through" : "text-[#111]"}`}>
+        {b.customerName || b.customerPhone}
+      </div>
+      <div className={`truncate text-[11px] ${cancelled ? "text-[#bbb]" : "text-[#666]"}`}>
+        {minToHHMM(it.startMin)}–{minToHHMM(it.startMin + it.durationMin)} · {it.people} ос
+      </div>
+    </button>
   );
 }
 
