@@ -7,6 +7,8 @@ import {
   LOCATIONS,
   PACKAGES,
   ROOMS,
+  perksToRu,
+  perksToEn,
 } from "../src/lib/catalog";
 import { resolvePrice, usesWeekendRate, makeCode } from "../src/lib/pricing";
 
@@ -151,6 +153,8 @@ async function main() {
         nameRu: p.nameRu,
         nameEn: p.nameEn,
         perksUk: p.perksUk,
+        perksRu: perksToRu(p.perksUk),
+        perksEn: perksToEn(p.perksUk),
         icon: p.icon,
         maxPeople: p.maxPeople,
         fixedPriceWeekday: p.weekday,

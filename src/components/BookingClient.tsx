@@ -551,32 +551,34 @@ export default function BookingClient({
     setPkgOpenId(null);
   }
 
-  const summaryLine = `${location.name} · ${date}${weekend ? ` · ${dict.weekendBadge}` : ""} · ${people} ${dict.stepPeople.toLowerCase()}`;
+  const summaryLine = `${location.name} · ${date}${weekend ? ` · ${dict.weekendBadge}` : ""} · ${people} ${dict.peopleWord}`;
 
   return (
     <div style={{ minHeight: "100vh", background: "#f2f2f2" }}>
-      {/* Header (sticky, like the main site) */}
-      <header className="sticky top-0 z-50 flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-[#e8e8e8] bg-white px-5 py-3 md:px-10">
+      {/* Header (sticky, like the main site; compact on phones) */}
+      <header className="sticky top-0 z-50 flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-[#e8e8e8] bg-white px-4 py-2 sm:gap-x-6 sm:py-3 md:px-10">
         {/* LEFT: logo (→ start screen) + brand name */}
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
           <Link href="/" aria-label={dict.brandName} className="shrink-0">
             <BrandLogo />
           </Link>
-          <div className="leading-tight">
-            <div className="text-[17px] font-bold text-brand-green">{dict.brandName}</div>
+          <div className="min-w-0 leading-tight">
+            <div className="truncate text-[15px] font-bold text-brand-green sm:text-[17px]">
+              {dict.brandName}
+            </div>
           </div>
         </div>
 
         {/* RIGHT: contacts (Telegram / Viber / phone) then languages */}
-        <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-2">
-          <div className="flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 sm:gap-x-4">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <a
               href="https://t.me/Lasertag_G75"
               target="_blank"
               rel="noreferrer"
               aria-label="Telegram"
               title="Telegram"
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-[#229ED9] text-white transition hover:opacity-90"
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-[#229ED9] text-white transition hover:opacity-90 sm:h-8 sm:w-8"
             >
               <TelegramGlyph />
             </a>
@@ -584,11 +586,11 @@ export default function BookingClient({
               href="viber://chat?number=%2B380994895161"
               aria-label="Viber"
               title="Viber"
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-[#7360F2] text-white transition hover:opacity-90"
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-[#7360F2] text-white transition hover:opacity-90 sm:h-8 sm:w-8"
             >
               <ViberGlyph />
             </a>
-            <a href={`tel:${phone}`} className="text-[15px] font-bold text-brand-ink">
+            <a href={`tel:${phone}`} className="text-[13px] font-bold text-brand-ink sm:text-[15px]">
               {phone}
             </a>
           </div>
@@ -1354,7 +1356,7 @@ function BrandLogo() {
 
   if (srcIdx >= LOGO_SOURCES.length) return <G75Logo />;
   return (
-    <span className="relative inline-block h-[52px] w-[52px]">
+    <span className="relative inline-block h-10 w-10 sm:h-[52px] sm:w-[52px]">
       {!loaded && (
         <span className="absolute inset-0">
           <G75Logo />
@@ -1366,7 +1368,7 @@ function BrandLogo() {
         alt="Лазертаг G-75"
         width={52}
         height={52}
-        className="relative h-[52px] w-[52px] object-contain"
+        className="relative h-full w-full object-contain"
         style={{ opacity: loaded ? 1 : 0 }}
         onLoad={() => setLoaded(true)}
         onError={advance}
@@ -1378,7 +1380,7 @@ function BrandLogo() {
 // G-75 target-style emblem. Links home; approximates the club's logo.
 function G75Logo() {
   return (
-    <svg width="46" height="46" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+    <svg width="100%" height="100%" viewBox="0 0 48 48" fill="none" aria-hidden="true">
       <circle cx="24" cy="24" r="21" stroke="#139600" strokeWidth="2" />
       <circle cx="24" cy="24" r="15" stroke="#56EF02" strokeWidth="1.5" opacity="0.7" />
       {/* crosshair ticks */}
