@@ -51,9 +51,51 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
   const activityIds = Array.from(new Set(input.items.map((i) => i.activityId)));
   const activities = await prisma.activity.findMany({
     where: { id: { in: activityIds } },
-    include: { prices: true },
+    include: { prices: true, rooms: { include: { room: true } } },
   });
   const actById = new Map(activities.map((a) => [a.id, a]));
+
+  // ---- room auto-assignment ----------------------------------------------
+  // Each item takes one of its activity's mapped rooms at this location.
+  // Existing bookings + earlier items of THIS booking both count as occupied.
+  const mappedRoomIdsAll = activities.flatMap((a) =>
+    a.rooms.filter((r) => r.room.locationId === input.locationId && r.room.active).map((r) => r.room.id)
+  );
+  const existingItems = mappedRoomIdsAll.length
+    ? await prisma.bookingItem.findMany({
+        where: {
+          roomId: { in: mappedRoomIdsAll },
+          booking: { date: input.date, locationId: input.locationId, status: { not: "CANCELLED" } },
+        },
+        include: { activity: { select: { cleanupMin: true } } },
+      })
+    : [];
+  // roomId -> occupied intervals [start, end+cleanup)
+  const roomBusy = new Map<string, [number, number][]>();
+  for (const it of existingItems) {
+    if (!it.roomId) continue;
+    const arr = roomBusy.get(it.roomId) ?? [];
+    arr.push([it.startMin, it.startMin + it.durationMin + (it.activity?.cleanupMin ?? 0)]);
+    roomBusy.set(it.roomId, arr);
+  }
+  const pickRoom = (activityId: string, startMin: number, durationMin: number): string | null => {
+    const act = actById.get(activityId);
+    if (!act) return null;
+    const rooms = act.rooms
+      .filter((r) => r.room.locationId === input.locationId && r.room.active)
+      .sort((a, b) => a.room.sortOrder - b.room.sortOrder);
+    if (!rooms.length) return null; // activity without mapped rooms → capacity model
+    const end = startMin + durationMin + act.cleanupMin;
+    for (const r of rooms) {
+      const busy = roomBusy.get(r.room.id) ?? [];
+      if (busy.every(([a, b]) => end <= a || b <= startMin)) {
+        busy.push([startMin, end]);
+        roomBusy.set(r.room.id, busy);
+        return r.room.id;
+      }
+    }
+    throw new Error(`«${act.nameUk}»: немає вільної кімнати на цей час — оберіть інший час`);
+  };
 
   // Build item rows with snapshot titles + resolved prices.
   const itemData = input.items.map((it) => {
@@ -119,6 +161,7 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
       durationMin: it.durationMin,
       people: it.people,
       price,
+      roomId: pickRoom(act.id, it.startMin, it.durationMin),
     };
   });
 

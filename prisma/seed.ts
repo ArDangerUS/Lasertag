@@ -2,9 +2,11 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import {
   ACTIVITIES,
+  ACTIVITY_ROOMS,
   ADDONS,
   LOCATIONS,
   PACKAGES,
+  ROOMS,
 } from "../src/lib/catalog";
 import { resolvePrice, usesWeekendRate, makeCode } from "../src/lib/pricing";
 
@@ -21,6 +23,8 @@ async function main() {
   await prisma.packageItem.deleteMany();
   await prisma.package.deleteMany();
   await prisma.activityPrice.deleteMany();
+  await prisma.activityRoom.deleteMany();
+  await prisma.room.deleteMany();
   await prisma.locationActivity.deleteMany();
   await prisma.addon.deleteMany();
   await prisma.activity.deleteMany();
@@ -47,6 +51,23 @@ async function main() {
   }
   console.log(`  ${LOCATIONS.length} locations`);
 
+  // ---- rooms ----
+  const roomByRef: Record<string, string> = {}; // "loc:key" -> id
+  for (let i = 0; i < ROOMS.length; i++) {
+    const r = ROOMS[i];
+    const room = await prisma.room.create({
+      data: {
+        locationId: locBySlug[r.loc],
+        key: r.key,
+        name: r.name,
+        note: r.note ?? "",
+        sortOrder: i,
+      },
+    });
+    roomByRef[`${r.loc}:${r.key}`] = room.id;
+  }
+  console.log(`  ${ROOMS.length} rooms`);
+
   // ---- activities + prices + location links ----
   const actByKey: Record<string, string> = {};
   for (const a of ACTIVITIES) {
@@ -69,6 +90,7 @@ async function main() {
         minPeople: a.minPeople,
         maxPeople: a.maxPeople,
         sortOrder: a.sortOrder,
+        active: !a.hidden,
       },
     });
     actByKey[a.key] = act.id;
@@ -95,6 +117,20 @@ async function main() {
     }
   }
   console.log(`  ${ACTIVITIES.length} activities`);
+
+  // ---- activity ↔ room mapping ----
+  let roomLinks = 0;
+  for (const [actKey, refs] of Object.entries(ACTIVITY_ROOMS)) {
+    if (!actByKey[actKey]) continue;
+    for (const ref of refs) {
+      if (!roomByRef[ref]) continue;
+      await prisma.activityRoom.create({
+        data: { activityId: actByKey[actKey], roomId: roomByRef[ref] },
+      });
+      roomLinks++;
+    }
+  }
+  console.log(`  ${roomLinks} activity-room links`);
 
   // ---- addons ----
   for (const ad of ADDONS) {
@@ -203,6 +239,23 @@ async function main() {
   const demoActs = ["laser", "scenario", "quest", "papershow", "banquet", "maze"];
   const locSlugs = ["nyvky", "gorodok", "new-way", "dream-yellow"];
 
+  // in-memory room occupancy for demo data: "date|roomId" -> [start,end)[]
+  const demoOcc: Record<string, [number, number][]> = {};
+  const pickRoom = (actKey: string, slug: string, iso: string, start: number, end: number) => {
+    const refs = (ACTIVITY_ROOMS[actKey] ?? []).filter((r) => r.startsWith(slug + ":"));
+    for (const ref of refs) {
+      const roomId = roomByRef[ref];
+      if (!roomId) continue;
+      const k = `${iso}|${roomId}`;
+      const busy = demoOcc[k] ?? [];
+      if (busy.every(([a, b]) => end <= a || b <= start)) {
+        (demoOcc[k] = busy).push([start, end]);
+        return roomId;
+      }
+    }
+    return null;
+  };
+
   let created = 0;
   for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
     const date = new Date(monday);
@@ -248,6 +301,7 @@ async function main() {
                 durationMin: dur,
                 people,
                 price,
+                roomId: pickRoom(actKey, slug, iso, startMin, startMin + dur),
               },
             ],
           },

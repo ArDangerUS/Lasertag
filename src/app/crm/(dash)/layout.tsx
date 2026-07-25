@@ -31,6 +31,7 @@ export default async function DashLayout({ children }: { children: React.ReactNo
 
           <nav className="flex flex-wrap items-center gap-1">
             <NavLink href="/crm">Календар</NavLink>
+            <NavLink href="/crm/stats">Статистика</NavLink>
             {meta.canEditCatalog && <NavLink href="/crm/settings">Розваги і ціни</NavLink>}
             {meta.canManageUsers && <NavLink href="/crm/users">Користувачі</NavLink>}
             <NavLink href="/crm/audit">Журнал</NavLink>

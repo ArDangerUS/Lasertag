@@ -513,6 +513,7 @@ function ActivityDayGrid({
             </div>
             {acts.map((a) => {
               const cap = a.capacityByLocation[location.id] ?? 1;
+              const mappedRooms = new Set(a.roomIdsByLocation[location.id] ?? []);
               // chips are rendered in the hour they START in
               const startingHere = entries.filter(
                 (e) => e.it.activityId === a.id && Math.floor(e.it.startMin / 60) === h && e.b.status !== "CANCELLED"
@@ -520,15 +521,26 @@ function ActivityDayGrid({
               const cancelledHere = entries.filter(
                 (e) => e.it.activityId === a.id && Math.floor(e.it.startMin / 60) === h && e.b.status === "CANCELLED"
               );
-              // occupancy = max concurrent sessions over the two half-hours
-              const busyAt = (m: number) =>
-                entries.filter(
+              // occupancy = rooms taken at minute m: items of ANY activity that
+              // sit in one of this activity's rooms (спільна арена лазертаг/
+              // сценарний) + roomless items of this activity (legacy)
+              const busyAt = (m: number) => {
+                const overlapping = entries.filter(
                   (e) =>
-                    e.it.activityId === a.id &&
                     e.b.status !== "CANCELLED" &&
                     e.it.startMin <= m &&
                     e.it.startMin + e.it.durationMin > m
+                );
+                const takenRooms = new Set(
+                  overlapping
+                    .filter((e) => e.it.roomId && mappedRooms.has(e.it.roomId))
+                    .map((e) => e.it.roomId as string)
+                );
+                const roomless = overlapping.filter(
+                  (e) => !e.it.roomId && e.it.activityId === a.id
                 ).length;
+                return takenRooms.size + roomless;
+              };
               const maxBusy = Math.max(busyAt(h * 60), busyAt(h * 60 + 30));
               const free = Math.max(0, cap - maxBusy);
               return (
@@ -589,6 +601,7 @@ function ItemChip({
       </div>
       <div className={`truncate text-[11px] ${cancelled ? "text-[#bbb]" : "text-[#666]"}`}>
         {minToHHMM(it.startMin)}–{minToHHMM(it.startMin + it.durationMin)} · {it.people} ос
+        {it.roomName ? ` · ${it.roomName}` : ""}
       </div>
     </button>
   );

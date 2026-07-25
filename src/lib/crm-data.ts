@@ -8,6 +8,8 @@ export type CrmBookingItem = {
   durationMin: number;
   people: number;
   price: number;
+  roomId: string | null;
+  roomName: string; // "Банкетна «Майнкрафт»" — порожньо, якщо кімнату не призначено
 };
 
 export type CrmBooking = {
@@ -33,7 +35,12 @@ export type CrmBooking = {
 export async function loadCrmBookings(fromISO: string, toISO: string): Promise<CrmBooking[]> {
   const rows = await prisma.booking.findMany({
     where: { date: { gte: fromISO, lte: toISO } },
-    include: { location: true, items: { orderBy: { startMin: "asc" } }, addons: true, createdBy: true },
+    include: {
+      location: true,
+      items: { orderBy: { startMin: "asc" }, include: { room: true } },
+      addons: true,
+      createdBy: true,
+    },
     orderBy: [{ date: "asc" }],
   });
   return rows.map((b) => ({
@@ -60,6 +67,8 @@ export async function loadCrmBookings(fromISO: string, toISO: string): Promise<C
       durationMin: i.durationMin,
       people: i.people,
       price: i.price,
+      roomId: i.roomId,
+      roomName: i.room?.name ?? "",
     })),
     addons: b.addons.map((a) => ({ id: a.id, title: a.title, qty: a.qty, price: a.price })),
   }));
@@ -78,6 +87,8 @@ export type CrmCatalog = {
     locationIds: string[];
     // rooms/arenas per location (parallel groups)
     capacityByLocation: Record<string, number>;
+    // mapped physical room ids per location (empty = capacity model)
+    roomIdsByLocation: Record<string, string[]>;
   }[];
   addons: { id: string; name: string; price: number }[];
 };
@@ -88,7 +99,10 @@ export async function loadCrmCatalog(): Promise<CrmCatalog> {
     prisma.activity.findMany({
       where: { active: true },
       orderBy: { sortOrder: "asc" },
-      include: { locations: { where: { active: true } } },
+      include: {
+        locations: { where: { active: true } },
+        rooms: { include: { room: true } },
+      },
     }),
     prisma.addon.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
   ]);
@@ -110,7 +124,18 @@ export async function loadCrmCatalog(): Promise<CrmCatalog> {
       durationMin: a.durationMin,
       durationOptions: a.durationOptions ? (JSON.parse(a.durationOptions) as number[]) : [],
       locationIds: a.locations.map((x) => x.locationId),
-      capacityByLocation: Object.fromEntries(a.locations.map((x) => [x.locationId, x.capacity])),
+      capacityByLocation: Object.fromEntries(
+        a.locations.map((x) => {
+          const mapped = a.rooms.filter((r) => r.room.locationId === x.locationId && r.room.active);
+          return [x.locationId, mapped.length || x.capacity];
+        })
+      ),
+      roomIdsByLocation: Object.fromEntries(
+        a.locations.map((x) => [
+          x.locationId,
+          a.rooms.filter((r) => r.room.locationId === x.locationId && r.room.active).map((r) => r.room.id),
+        ])
+      ),
     })),
     addons: addons.map((a) => ({ id: a.id, name: a.nameUk, price: a.price })),
   };

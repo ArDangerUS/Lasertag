@@ -153,6 +153,7 @@ export default function BookingEditor({
                   <div className="text-[13px] font-semibold">{i.title}</div>
                   <div className="text-[11px] text-[#888]">
                     {minToHHMM(i.startMin)}–{minToHHMM(i.startMin + i.durationMin)} · {i.people} ос
+                    {i.roomName ? ` · ${i.roomName}` : ""}
                   </div>
                 </div>
                 <div className="flex items-center gap-1">

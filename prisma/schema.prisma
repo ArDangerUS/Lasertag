@@ -34,8 +34,38 @@ model Location {
   activities LocationActivity[]
   packages   Package[]
   bookings   Booking[]
+  rooms      Room[]
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+// A physical room/zone at a location (лазертаг-арена, банкетна «Майнкрафт»…).
+// Activities are mapped to rooms via ActivityRoom (multi-select): activities
+// sharing a room (лазертаг + сценарний на одній арені) block one another.
+model Room {
+  id         String   @id @default(cuid())
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  locationId String
+  key        String // unique within location, e.g. "arena-a", "banquet-minecraft"
+  name       String // "Банкетна «Майнкрафт»"
+  note       String  @default("") // "до 10–12 дітей"
+  sortOrder  Int     @default(0)
+  active     Boolean @default(true)
+
+  activities ActivityRoom[]
+  items      BookingItem[]
+
+  @@unique([locationId, key])
+}
+
+model ActivityRoom {
+  id         String   @id @default(cuid())
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  activityId String
+  room       Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  roomId     String
+
+  @@unique([activityId, roomId])
 }
 
 model Activity {
@@ -69,6 +99,7 @@ model Activity {
   packageItems PackageItem[]
   bookingItems BookingItem[]
   prices    ActivityPrice[]
+  rooms     ActivityRoom[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -225,7 +256,10 @@ model BookingItem {
   durationMin Int
   people     Int  @default(1)
   price      Int  // grn, snapshot (editable in CRM)
-  roomIndex  Int  @default(0) // which banquet room / parallel slot
+  // Assigned physical room (auto-picked on creation when the activity has
+  // mapped rooms). Null for legacy items / activities without rooms.
+  room       Room?   @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  roomId     String?
 
   @@index([bookingId])
 }

@@ -28,6 +28,8 @@ export type SeedActivity = {
   minPeople: number;
   maxPeople: number;
   sortOrder: number;
+  // true => створена, але прихована з сайту (active=false)
+  hidden?: boolean;
   // Locations where this activity is offered (slugs).
   locations: string[];
   // Rooms/arenas per location (parallel groups). Default 1.
@@ -208,7 +210,8 @@ export const ACTIVITIES: SeedActivity[] = [
     minPeople: 1,
     maxPeople: 10,
     sortOrder: 5,
-    // Доступний на всіх локаціях.
+    // Поки що прихована: окремої кімнати під «Хранителя Тіней» немає.
+    hidden: true,
     locations: ALL,
     prices: [{ weekday: 6000, weekend: 6000 }],
   },
@@ -346,6 +349,70 @@ export const ADDONS = [
   { key: "arena", nameUk: "Індивідуальне закриття арени", nameRu: "Индивидуальное закрытие арены", nameEn: "Private arena", subUk: "лазертаг тільки для вас, 1 год", subRu: "лазертаг только для вас, 1 час", subEn: "lasertag just for you, 1h", price: 14000, sortOrder: 8 },
 ];
 
+// ---------------------------------------------------------------------------
+// Кімнати на локаціях (зі слів клієнта). Розвага займає одну з призначених їй
+// кімнат; розваги зі спільною кімнатою (лазертаг і сценарний на одній арені,
+// квест на арені Дріму) блокують одна одну автоматично.
+export type SeedRoom = { loc: string; key: string; name: string; note?: string };
+
+export const ROOMS: SeedRoom[] = [
+  // ---- Нивки ----
+  { loc: "nyvky", key: "arena", name: "Лазертаг-арена" },
+  { loc: "nyvky", key: "papershow", name: "Кімната паперового шоу" },
+  { loc: "nyvky", key: "quest", name: "Квест-кімната" },
+  { loc: "nyvky", key: "banquet-cosmos-s", name: "Банкетна «Космос» мала", note: "до 10 дітей" },
+  { loc: "nyvky", key: "banquet-cosmos-l", name: "Банкетна «Космос» велика", note: "до 25–30 дітей" },
+  // ---- New Way ----
+  { loc: "new-way", key: "arena", name: "Лазертаг-арена" },
+  { loc: "new-way", key: "papershow", name: "Кімната паперового шоу" },
+  { loc: "new-way", key: "quest", name: "Квест-кімната" },
+  { loc: "new-way", key: "banquet-cosmos", name: "Банкетна «Космос»", note: "до 25 дітей" },
+  { loc: "new-way", key: "banquet-kayuta", name: "Банкетна «Каюта»", note: "до 10–12 дітей" },
+  { loc: "new-way", key: "banquet-minecraft", name: "Банкетна «Майнкрафт»", note: "до 10–12 дітей" },
+  // ---- Дрім ----
+  { loc: "dream-yellow", key: "arena", name: "Лазертаг-арена / квест-зона", note: "арена ділиться на квестову зону" },
+  { loc: "dream-yellow", key: "papershow", name: "Кімната паперового шоу" },
+  { loc: "dream-yellow", key: "banquet", name: "Банкетна кімната", note: "до 20 дітей" },
+  // ---- Городок ----
+  { loc: "gorodok", key: "arena-a", name: "Лазертаг-арена А", note: "велика арена ділиться на дві" },
+  { loc: "gorodok", key: "arena-b", name: "Лазертаг-арена Б" },
+  { loc: "gorodok", key: "quest", name: "Квест-зона" },
+  { loc: "gorodok", key: "papershow", name: "Кімната паперового шоу" },
+  { loc: "gorodok", key: "squid", name: "Кімната «Гра в кальмара»" },
+  { loc: "gorodok", key: "neotrek", name: "Кімната «Неотрек»" },
+  { loc: "gorodok", key: "puzzles", name: "Кімната «Пазли»" },
+  { loc: "gorodok", key: "lasermaze", name: "Кімната «Лазерний лабіринт»" },
+  { loc: "gorodok", key: "showroom", name: "Кімната шоу-програм", note: "партнерські шоу — бронює менеджер" },
+  { loc: "gorodok", key: "banquet-cosmos", name: "Банкетна «Космос»" },
+  { loc: "gorodok", key: "banquet-kayuta-1", name: "Банкетна «Каюта 1»" },
+  { loc: "gorodok", key: "banquet-kayuta-2", name: "Банкетна «Каюта 2»" },
+  { loc: "gorodok", key: "banquet-minecraft", name: "Банкетна «Майнкрафт»" },
+  { loc: "gorodok", key: "banquet-dino", name: "Банкетна «Динозаври»" },
+  { loc: "gorodok", key: "banquet-avatar", name: "Банкетна «Аватар»" },
+  { loc: "gorodok", key: "banquet-potter", name: "Банкетна «Гаррі Поттер»" },
+];
+
+// activityKey -> room refs "loc:key". Лазертаг і сценарний ділять арени;
+// квест на Дрімі проводиться на арені (ділиться на квестову зону).
+export const ACTIVITY_ROOMS: Record<string, string[]> = {
+  laser: ["nyvky:arena", "new-way:arena", "dream-yellow:arena", "gorodok:arena-a", "gorodok:arena-b"],
+  scenario: ["nyvky:arena", "new-way:arena", "dream-yellow:arena", "gorodok:arena-a", "gorodok:arena-b"],
+  quest: ["nyvky:quest", "new-way:quest", "dream-yellow:arena", "gorodok:quest"],
+  papershow: ["nyvky:papershow", "new-way:papershow", "dream-yellow:papershow"],
+  paperneon: ["gorodok:papershow"],
+  squid: ["gorodok:squid"],
+  neotrek: ["gorodok:neotrek"],
+  puzzles: ["gorodok:puzzles"],
+  lasermaze: ["gorodok:lasermaze"],
+  banquet: [
+    "nyvky:banquet-cosmos-s", "nyvky:banquet-cosmos-l",
+    "new-way:banquet-cosmos", "new-way:banquet-kayuta", "new-way:banquet-minecraft",
+    "dream-yellow:banquet",
+    "gorodok:banquet-cosmos", "gorodok:banquet-kayuta-1", "gorodok:banquet-kayuta-2",
+    "gorodok:banquet-minecraft", "gorodok:banquet-dino", "gorodok:banquet-avatar", "gorodok:banquet-potter",
+  ],
+};
+
 // Complex offers ("комплекси"). Location-specific — content and prices differ.
 // `items` is the bookable sequence placed on the calendar. Non-room items run
 // consecutively in the client's recommended order (quest → lasertag → paper
@@ -439,7 +506,7 @@ export const PACKAGES: SeedPackage[] = [
       { key: "quest", durationMin: 60, order: O.quest },
       { key: "scenario", durationMin: 60, order: O.scenario },
       { key: "paperneon", durationMin: 30, order: O.papershow },
-      { key: "maze", durationMin: 30, order: O.maze },
+      { key: "lasermaze", durationMin: 30, order: O.maze },
       { key: "squid", durationMin: 30, order: O.squid },
       { key: "puzzles", durationMin: 30, order: O.puzzles },
       { key: "neotrek", durationMin: 30, order: O.neotrek },
