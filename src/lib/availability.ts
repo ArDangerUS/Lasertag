@@ -90,11 +90,17 @@ export async function computeBusy(locationId: string, date: string): Promise<{
     }
     occupiedByActivity[activity.id] = occupied;
 
+    // Busy START slots. Duration-flexible activities (durationOptions set) are
+    // booked as 30-min slots, so a start is busy only if ITS OWN 30 minutes are
+    // occupied — not if a full standard session wouldn't fit (11:30 must stay
+    // bookable when 12:00–13:00 is taken). Fixed-duration activities check
+    // their whole session span.
+    const sessionMin = activity.durationOptions ? step : activity.durationMin;
     const occupiedSet = new Set(occupied);
     const busy: number[] = [];
-    for (let i = open; i + activity.durationMin <= close; i += step) {
+    for (let i = open; i + sessionMin <= close; i += step) {
       let overflow = false;
-      for (let m = i; m < i + activity.durationMin; m += step) {
+      for (let m = i; m < i + sessionMin; m += step) {
         if (occupiedSet.has(m)) {
           overflow = true;
           break;
