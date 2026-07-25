@@ -91,10 +91,11 @@ export type CrmCatalog = {
     roomIdsByLocation: Record<string, string[]>;
   }[];
   addons: { id: string; name: string; price: number }[];
+  rooms: { id: string; name: string; locationId: string }[];
 };
 
 export async function loadCrmCatalog(): Promise<CrmCatalog> {
-  const [locations, activities, addons] = await Promise.all([
+  const [locations, activities, addons, rooms] = await Promise.all([
     prisma.location.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
     prisma.activity.findMany({
       where: { active: true },
@@ -105,6 +106,7 @@ export async function loadCrmCatalog(): Promise<CrmCatalog> {
       },
     }),
     prisma.addon.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
+    prisma.room.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
   ]);
   return {
     locations: locations.map((l) => ({
@@ -138,5 +140,6 @@ export async function loadCrmCatalog(): Promise<CrmCatalog> {
       ),
     })),
     addons: addons.map((a) => ({ id: a.id, name: a.nameUk, price: a.price })),
+    rooms: rooms.map((r) => ({ id: r.id, name: r.name, locationId: r.locationId })),
   };
 }

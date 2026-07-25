@@ -11,6 +11,8 @@ export const bookingItemSchema = z.object({
   people: z.number().int().min(1).max(200),
   // optional explicit price override (CRM). If absent, computed from catalog.
   price: z.number().int().min(0).optional(),
+  // optional specific room (CRM manager's choice); absent = auto-assign
+  roomId: z.string().optional(),
 });
 
 export const bookingAddonSchema = z.object({
@@ -78,7 +80,12 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
     arr.push([it.startMin, it.startMin + it.durationMin + (it.activity?.cleanupMin ?? 0)]);
     roomBusy.set(it.roomId, arr);
   }
-  const pickRoom = (activityId: string, startMin: number, durationMin: number): string | null => {
+  const pickRoom = (
+    activityId: string,
+    startMin: number,
+    durationMin: number,
+    preferredRoomId?: string
+  ): string | null => {
     const act = actById.get(activityId);
     if (!act) return null;
     const rooms = act.rooms
@@ -86,13 +93,25 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
       .sort((a, b) => a.room.sortOrder - b.room.sortOrder);
     if (!rooms.length) return null; // activity without mapped rooms → capacity model
     const end = startMin + durationMin + act.cleanupMin;
-    for (const r of rooms) {
-      const busy = roomBusy.get(r.room.id) ?? [];
-      if (busy.every(([a, b]) => end <= a || b <= startMin)) {
-        busy.push([startMin, end]);
-        roomBusy.set(r.room.id, busy);
-        return r.room.id;
+    const isFree = (roomId: string) =>
+      (roomBusy.get(roomId) ?? []).every(([a, b]) => end <= a || b <= startMin);
+    const occupy = (roomId: string) => {
+      const busy = roomBusy.get(roomId) ?? [];
+      busy.push([startMin, end]);
+      roomBusy.set(roomId, busy);
+      return roomId;
+    };
+    // Manager explicitly chose a room — honour it or fail with a clear reason.
+    if (preferredRoomId) {
+      const r = rooms.find((x) => x.room.id === preferredRoomId);
+      if (!r) throw new Error(`«${act.nameUk}»: обрана кімната не підходить для цієї розваги`);
+      if (!isFree(preferredRoomId)) {
+        throw new Error(`Кімната «${r.room.name}» вже зайнята на цей час`);
       }
+      return occupy(preferredRoomId);
+    }
+    for (const r of rooms) {
+      if (isFree(r.room.id)) return occupy(r.room.id);
     }
     throw new Error(`«${act.nameUk}»: немає вільної кімнати на цей час — оберіть інший час`);
   };
@@ -161,7 +180,7 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
       durationMin: it.durationMin,
       people: it.people,
       price,
-      roomId: pickRoom(act.id, it.startMin, it.durationMin),
+      roomId: pickRoom(act.id, it.startMin, it.durationMin, it.roomId),
     };
   });
 

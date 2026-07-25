@@ -12,7 +12,7 @@ export const updateBookingSchema = z.object({
   people: z.number().int().min(1).max(200).optional(),
   prepaidAmount: z.number().int().min(0).optional(),
   totalPrice: z.number().int().min(0).optional(),
-  // Per-item price / time edits
+  // Per-item price / time / room edits
   items: z
     .array(
       z.object({
@@ -21,6 +21,8 @@ export const updateBookingSchema = z.object({
         startMin: z.number().int().min(0).max(1440).optional(),
         durationMin: z.number().int().min(10).max(600).optional(),
         people: z.number().int().min(1).max(200).optional(),
+        // specific room; null = зняти призначення (авто при потребі)
+        roomId: z.string().nullable().optional(),
       })
     )
     .optional(),
@@ -29,19 +31,64 @@ export const updateBookingSchema = z.object({
 export type UpdateBookingInput = z.infer<typeof updateBookingSchema>;
 
 export async function updateBooking(id: string, input: UpdateBookingInput, actor: SessionUser) {
-  const before = await prisma.booking.findUnique({ where: { id }, include: { items: true } });
+  const before = await prisma.booking.findUnique({
+    where: { id },
+    include: { items: { include: { room: true } } },
+  });
   if (!before) throw new Error("Бронь не знайдено");
 
   if (input.status && !isStatus(input.status)) throw new Error("Невірний статус");
 
+  const roomChanges: string[] = [];
+
   // Apply item edits first.
   if (input.items?.length) {
     for (const it of input.items) {
-      const data: Record<string, number> = {};
+      const beforeItem = before.items.find((x) => x.id === it.id);
+      if (!beforeItem) continue;
+      const data: Record<string, number | string | null> = {};
       if (it.price != null) data.price = it.price;
       if (it.startMin != null) data.startMin = it.startMin;
       if (it.durationMin != null) data.durationMin = it.durationMin;
       if (it.people != null) data.people = it.people;
+
+      // Manager picked a specific room for this item.
+      if (it.roomId !== undefined && it.roomId !== beforeItem.roomId) {
+        if (it.roomId) {
+          const mapped = await prisma.activityRoom.findFirst({
+            where: {
+              activityId: beforeItem.activityId,
+              roomId: it.roomId,
+              room: { locationId: before.locationId, active: true },
+            },
+            include: { room: true },
+          });
+          if (!mapped) throw new Error("Ця кімната не підходить для цієї розваги");
+          // conflict check against other items in the same room that day
+          const start = it.startMin ?? beforeItem.startMin;
+          const dur = it.durationMin ?? beforeItem.durationMin;
+          const candidates = await prisma.bookingItem.findMany({
+            where: {
+              roomId: it.roomId,
+              id: { not: it.id },
+              booking: { date: before.date, locationId: before.locationId, status: { not: "CANCELLED" } },
+            },
+          });
+          const clash = candidates.find(
+            (c) => c.startMin < start + dur && c.startMin + c.durationMin > start
+          );
+          if (clash) {
+            throw new Error(`Кімната «${mapped.room.name}» вже зайнята о ${Math.floor(clash.startMin / 60)}:${String(clash.startMin % 60).padStart(2, "0")}`);
+          }
+          roomChanges.push(
+            `${beforeItem.title}: кімната ${beforeItem.room?.name ?? "авто"} → ${mapped.room.name}`
+          );
+        } else {
+          roomChanges.push(`${beforeItem.title}: кімнату знято (${beforeItem.room?.name ?? "—"})`);
+        }
+        data.roomId = it.roomId;
+      }
+
       if (Object.keys(data).length) {
         await prisma.bookingItem.update({ where: { id: it.id }, data });
       }
@@ -77,9 +124,11 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
     entity: "Booking",
     entityId: id,
     bookingId: id,
-    summary: statusChanged
-      ? `Статус ${before.status} → ${updated.status} · ${updated.code}`
-      : `Змінено бронь ${updated.code} (сума ${updated.totalPrice} грн)`,
+    summary:
+      (statusChanged
+        ? `Статус ${before.status} → ${updated.status} · ${updated.code}`
+        : `Змінено бронь ${updated.code} (сума ${updated.totalPrice} грн)`) +
+      (roomChanges.length ? `; ${roomChanges.join("; ")}` : ""),
     before: {
       status: before.status,
       total: before.totalPrice,

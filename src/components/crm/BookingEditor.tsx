@@ -28,8 +28,20 @@ export default function BookingEditor({
   const [itemPrices, setItemPrices] = useState<Record<string, number>>(
     Object.fromEntries(booking.items.map((i) => [i.id, i.price]))
   );
+  const [itemRooms, setItemRooms] = useState<Record<string, string>>(
+    Object.fromEntries(booking.items.map((i) => [i.id, i.roomId ?? ""]))
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  // Rooms selectable for an item = rooms mapped to its activity at this location.
+  const roomOptions = (activityId: string) => {
+    const act = catalog.activities.find((a) => a.id === activityId);
+    const ids = act?.roomIdsByLocation[booking.locationId] ?? [];
+    return ids
+      .map((id) => catalog.rooms.find((r) => r.id === id))
+      .filter(Boolean) as { id: string; name: string }[];
+  };
 
   const total =
     Object.values(itemPrices).reduce((s, v) => s + (Number(v) || 0), 0) +
@@ -50,7 +62,14 @@ export default function BookingEditor({
           people,
           prepaidAmount: Number(prepaid) || 0,
           totalPrice: total,
-          items: booking.items.map((i) => ({ id: i.id, price: Number(itemPrices[i.id]) || 0 })),
+          items: booking.items.map((i) => ({
+            id: i.id,
+            price: Number(itemPrices[i.id]) || 0,
+            // send only when the manager changed it (null = зняти кімнату)
+            ...(itemRooms[i.id] !== (i.roomId ?? "")
+              ? { roomId: itemRooms[i.id] || null }
+              : {}),
+          })),
         }),
       });
       const data = await res.json();
@@ -147,29 +166,49 @@ export default function BookingEditor({
         <div>
           <Label>Розваги та ціни</Label>
           <div className="flex flex-col gap-2">
-            {booking.items.map((i) => (
-              <div key={i.id} className="flex items-center gap-3 rounded-xl bg-[#0e0e0e] px-3 py-2.5">
-                <div className="flex-1">
-                  <div className="text-[13px] font-semibold">{i.title}</div>
-                  <div className="text-[11px] text-[#888]">
-                    {minToHHMM(i.startMin)}–{minToHHMM(i.startMin + i.durationMin)} · {i.people} ос
-                    {i.roomName ? ` · ${i.roomName}` : ""}
+            {booking.items.map((i) => {
+              const rooms = roomOptions(i.activityId);
+              return (
+                <div key={i.id} className="flex flex-wrap items-center gap-3 rounded-xl bg-[#0e0e0e] px-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-semibold">{i.title}</div>
+                    <div className="text-[11px] text-[#888]">
+                      {minToHHMM(i.startMin)}–{minToHHMM(i.startMin + i.durationMin)} · {i.people} ос
+                      {!rooms.length && i.roomName ? ` · ${i.roomName}` : ""}
+                    </div>
+                  </div>
+                  {/* Manager can pin a specific room (validated server-side) */}
+                  {rooms.length > 0 && (
+                    <select
+                      value={itemRooms[i.id] ?? ""}
+                      disabled={!canWrite}
+                      onChange={(e) => setItemRooms((m) => ({ ...m, [i.id]: e.target.value }))}
+                      className="max-w-[190px] rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[12px] text-white"
+                      title="Кімната"
+                    >
+                      <option value="">кімната: авто</option>
+                      {rooms.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={itemPrices[i.id]}
+                      disabled={!canWrite}
+                      onChange={(e) =>
+                        setItemPrices((p) => ({ ...p, [i.id]: Number(e.target.value) || 0 }))
+                      }
+                      className="w-24 rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-right text-[13px] text-white"
+                    />
+                    <span className="text-[12px] text-[#888]">грн</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <input
-                    type="number"
-                    value={itemPrices[i.id]}
-                    disabled={!canWrite}
-                    onChange={(e) =>
-                      setItemPrices((p) => ({ ...p, [i.id]: Number(e.target.value) || 0 }))
-                    }
-                    className="w-24 rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-right text-[13px] text-white"
-                  />
-                  <span className="text-[12px] text-[#888]">грн</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {booking.addons.map((a) => (
               <div key={a.id} className="flex items-center justify-between rounded-xl bg-[#0e0e0e] px-3 py-2 text-[13px]">
                 <span className="text-[#ccc]">

@@ -5,7 +5,7 @@ import type { CrmCatalog } from "@/lib/crm-data";
 import { minToHHMM } from "@/lib/pricing";
 import Modal from "./Modal";
 
-type Line = { activityId: string; startMin: number; durationMin: number; people: number; price?: number };
+type Line = { activityId: string; startMin: number; durationMin: number; people: number; price?: number; roomId?: string };
 
 export default function BookingCreate({
   catalog,
@@ -34,6 +34,15 @@ export default function BookingCreate({
     () => catalog.activities.filter((a) => a.locationIds.includes(locationId)),
     [catalog.activities, locationId]
   );
+
+  // Rooms available for an activity at the chosen location (manager may pin one).
+  const roomOptions = (activityId: string) => {
+    const act = catalog.activities.find((a) => a.id === activityId);
+    const ids = act?.roomIdsByLocation[locationId] ?? [];
+    return ids
+      .map((id) => catalog.rooms.find((r) => r.id === id))
+      .filter(Boolean) as { id: string; name: string }[];
+  };
 
   function addLine() {
     const a = locActivities[0];
@@ -78,6 +87,7 @@ export default function BookingCreate({
             ...(l.price != null && l.price !== undefined && !Number.isNaN(l.price)
               ? { price: l.price }
               : {}),
+            ...(l.roomId ? { roomId: l.roomId } : {}),
           })),
           addons: Object.entries(addonIds)
             .filter(([, q]) => q > 0)
@@ -198,6 +208,7 @@ export default function BookingCreate({
                       updateLine(i, {
                         activityId: e.target.value,
                         durationMin: a?.durationOptions[0] ?? a?.durationMin ?? 60,
+                        roomId: undefined,
                       });
                     }}
                     className="flex-1 rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
@@ -230,6 +241,21 @@ export default function BookingCreate({
                       </option>
                     ))}
                   </select>
+                  {roomOptions(l.activityId).length > 0 && (
+                    <select
+                      value={l.roomId ?? ""}
+                      onChange={(e) => updateLine(i, { roomId: e.target.value || undefined })}
+                      className="max-w-[170px] rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
+                      title="Кімната (авто = система обере вільну)"
+                    >
+                      <option value="">кімната: авто</option>
+                      {roomOptions(l.activityId).map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <input
                     type="number"
                     value={l.people}
