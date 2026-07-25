@@ -64,7 +64,7 @@ export default function BookingEditor({
   }
 
   async function remove() {
-    if (!confirm(`Видалити бронь ${booking.code}? Дію буде записано в журнал.`)) return;
+    if (!confirm(`Видалити бронь ${booking.code}? Цю дію не можна буде скасувати.`)) return;
     setSaving(true);
     try {
       const res = await fetch(`/api/crm/bookings/${booking.id}`, { method: "DELETE" });

@@ -309,6 +309,7 @@ export default function BookingClient({
       sub: string;
       price: number;
       people: number;
+      priceOverride?: number; // explicit price sent to the server (arena closure)
     };
     const items: CartItem[] = [];
 
@@ -396,8 +397,27 @@ export default function BookingClient({
     });
     items.sort((x, y) => x.startMin - y.startMin);
 
+    // «Індивідуальне закриття арени» — 14 000 грн ЗА ГОДИНУ НА КОМПАНІЮ, а не
+    // додатково до лазертагу. Доступне лише коли обрана 1 година лазертагу;
+    // тоді ця година входить у ціну закриття (стає 0 у кошику).
+    const laserAct = catalog.activities.find((x) => x.key === "laser");
+    const arenaAddon = catalog.addons.find((x) => x.key === "arena");
+    const arenaOn = arenaAddon ? (addonQty[arenaAddon.id] ?? 0) > 0 : false;
+    const arenaBlockIdx = laserAct
+      ? items.findIndex((i) => i.activityId === laserAct.id && i.durationMin === 60)
+      : -1;
+    const arenaApplied = arenaOn && arenaBlockIdx >= 0;
+    if (arenaApplied) {
+      const it = items[arenaBlockIdx];
+      it.price = 0;
+      it.priceOverride = 0;
+      it.sub = `${minToHHMM(it.startMin)}–${minToHHMM(it.startMin + it.durationMin)} · ${dict.arenaIncluded}`;
+    }
+
     const addons = catalog.addons
       .filter((ad) => (addonQty[ad.id] ?? 0) > 0)
+      // arena line shows only when it actually covers a lasertag hour
+      .filter((ad) => ad.key !== "arena" || arenaApplied)
       .map((ad) => {
         const qty = addonQty[ad.id];
         const price = ad.tiers ? (ad.tiers[String(qty)] ?? ad.price * qty) : ad.price * qty;
@@ -439,6 +459,24 @@ export default function BookingClient({
     return { items, addons, pkg, total };
   }, [picks, actById, people, dict, catalog.addons, catalog.packages, addonQty, pkgBooking, expandPackage, weekend, location.slug, date, locationId, priceRowsOf, priceFor]);
 
+  // Arena closure is only meaningful with a 1-hour lasertag block selected.
+  const laserActId = useMemo(
+    () => catalog.activities.find((a) => a.key === "laser")?.id,
+    [catalog.activities]
+  );
+  const arenaEligible = useMemo(
+    () => cart.items.some((i) => i.activityId === laserActId && i.durationMin === 60),
+    [cart.items, laserActId]
+  );
+  // Auto-unselect the arena addon when the qualifying hour disappears.
+  useEffect(() => {
+    const arena = catalog.addons.find((a) => a.key === "arena");
+    if (!arena) return;
+    if ((addonQty[arena.id] ?? 0) > 0 && !arenaEligible) {
+      setAddonQty((q) => ({ ...q, [arena.id]: 0 }));
+    }
+  }, [arenaEligible, addonQty, catalog.addons]);
+
   async function submit() {
     setError("");
     if (!customerPhone.trim()) return setError(dict.errPhone);
@@ -446,12 +484,14 @@ export default function BookingClient({
     if (!people || people < 1) return setError(dict.errPeople);
     setSubmitting(true);
     try {
-      // Individual activity picks.
+      // Individual activity picks. priceOverride (0) is sent for the lasertag
+      // hour covered by the arena closure so the server doesn't re-price it.
       const individualItems = cart.items.map((i) => ({
         activityId: i.activityId,
         startMin: i.startMin,
         durationMin: i.durationMin,
         people: i.people,
+        ...(i.priceOverride != null ? { price: i.priceOverride } : {}),
       }));
       // Package items: fixed package price on the first item, 0 on the rest so
       // the booking total equals the advertised package price.
@@ -949,12 +989,20 @@ export default function BookingClient({
                     const shownPrice = ad.tiers
                       ? ad.tiers[String(on ? qty : tierKeys[0])] ?? ad.price
                       : ad.price;
+                    const arenaLocked = ad.key === "arena" && !arenaEligible;
                     return (
                       <button
                         key={ad.id}
-                        onClick={() => setAddonQty((q) => ({ ...q, [ad.id]: on ? 0 : 1 }))}
+                        onClick={() => {
+                          if (arenaLocked) return;
+                          setAddonQty((q) => ({ ...q, [ad.id]: on ? 0 : 1 }));
+                        }}
                         className={`flex flex-col rounded-2xl border p-4 text-left transition ${
-                          on ? "border-2 border-[#56EF02] bg-[#f6fee9]" : "border-[#E5E5E5] bg-white"
+                          on
+                            ? "border-2 border-[#56EF02] bg-[#f6fee9]"
+                            : arenaLocked
+                              ? "cursor-not-allowed border-[#eee] bg-[#fafafa] opacity-70"
+                              : "border-[#E5E5E5] bg-white"
                         }`}
                       >
                         <span className="flex w-full items-start gap-2">
@@ -970,6 +1018,11 @@ export default function BookingClient({
                         {/* For tiered addons (photographer) the hint shows only once selected */}
                         {ad.sub && (!ad.tiers || on) && (
                           <span className="mt-1 block text-[12px] text-[#888]">{ad.sub}</span>
+                        )}
+                        {arenaLocked && (
+                          <span className="mt-1 block text-[11px] font-bold text-[#b6791b]">
+                            {dict.arenaNeedHour}
+                          </span>
                         )}
 
                         {/* Photographer hours stepper */}

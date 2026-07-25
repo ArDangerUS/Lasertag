@@ -51,6 +51,7 @@ export type PubLocation = {
 
 export type PubAddon = {
   id: string;
+  key: string; // machine key ("arena" has special behaviour)
   name: string;
   sub: string;
   price: number; // 0 => "ціна уточнюється"
@@ -130,6 +131,7 @@ export async function loadPublicCatalog(locale: Locale): Promise<PublicCatalog> 
     })),
     addons: addons.map((a) => ({
       id: a.id,
+      key: a.key,
       name: localizedName(a, locale),
       sub: localizedSub(a, locale),
       price: a.price,

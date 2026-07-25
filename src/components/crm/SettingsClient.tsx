@@ -335,7 +335,7 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
   }
 
   async function removeActivity() {
-    if (!confirm(`Видалити розвагу «${act.nameUk}»? Дію буде записано в журнал.`)) return;
+    if (!confirm(`Видалити розвагу «${act.nameUk}»? Цю дію не можна буде скасувати.`)) return;
     setBusy(true);
     try {
       const res = await fetch(`/api/crm/activities/${act.id}`, { method: "DELETE" });
