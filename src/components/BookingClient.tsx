@@ -557,8 +557,8 @@ export default function BookingClient({
     <div style={{ minHeight: "100vh", background: "#f2f2f2" }}>
       {/* Header (sticky, like the main site; compact on phones) */}
       <header className="sticky top-0 z-50 flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-[#e8e8e8] bg-white px-4 py-2 sm:gap-x-6 sm:py-3 md:px-10">
-        {/* LEFT: logo (→ start screen) + brand name */}
-        <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+        {/* LEFT: logo (→ start screen) + brand name, contacts underneath */}
+        <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
           <Link href="/" aria-label={dict.brandName} className="shrink-0">
             <BrandLogo />
           </Link>
@@ -566,34 +566,34 @@ export default function BookingClient({
             <div className="truncate text-[15px] font-bold text-brand-green sm:text-[17px]">
               {dict.brandName}
             </div>
+            <div className="mt-1 flex items-center gap-1.5 sm:gap-2">
+              <a
+                href="https://t.me/Lasertag_G75"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Telegram"
+                title="Telegram"
+                className="flex h-6 w-6 items-center justify-center rounded-full bg-[#229ED9] text-white transition hover:opacity-90 sm:h-7 sm:w-7"
+              >
+                <TelegramGlyph />
+              </a>
+              <a
+                href="viber://chat?number=%2B380994895161"
+                aria-label="Viber"
+                title="Viber"
+                className="flex h-6 w-6 items-center justify-center rounded-full bg-[#7360F2] text-white transition hover:opacity-90 sm:h-7 sm:w-7"
+              >
+                <ViberGlyph />
+              </a>
+              <a href={`tel:${phone}`} className="text-[12px] font-bold text-brand-ink sm:text-[14px]">
+                {phone}
+              </a>
+            </div>
           </div>
         </div>
 
-        {/* RIGHT: contacts (Telegram / Viber / phone) then languages */}
-        <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 sm:gap-x-4">
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <a
-              href="https://t.me/Lasertag_G75"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Telegram"
-              title="Telegram"
-              className="flex h-7 w-7 items-center justify-center rounded-full bg-[#229ED9] text-white transition hover:opacity-90 sm:h-8 sm:w-8"
-            >
-              <TelegramGlyph />
-            </a>
-            <a
-              href="viber://chat?number=%2B380994895161"
-              aria-label="Viber"
-              title="Viber"
-              className="flex h-7 w-7 items-center justify-center rounded-full bg-[#7360F2] text-white transition hover:opacity-90 sm:h-8 sm:w-8"
-            >
-              <ViberGlyph />
-            </a>
-            <a href={`tel:${phone}`} className="text-[13px] font-bold text-brand-ink sm:text-[15px]">
-              {phone}
-            </a>
-          </div>
+        {/* RIGHT: languages only */}
+        <div className="ml-auto flex items-center">
           <LangDropdown locale={locale} />
         </div>
       </header>
@@ -1402,7 +1402,7 @@ function G75Logo() {
 // Official Telegram paper-plane (simple-icons path, plane only).
 function TelegramGlyph() {
   return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ marginLeft: -1, marginTop: 1 }}>
+    <svg className="h-[14px] w-[14px] sm:h-4 sm:w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ marginLeft: -1, marginTop: 1 }}>
       <path d="M23.91 3.79 20.3 20.84c-.25 1.21-.98 1.5-2 .94l-5.5-4.07-2.66 2.57c-.3.3-.55.56-1.1.56-.72 0-.6-.27-.84-.95L6.3 13.7l-5.45-1.7c-1.18-.35-1.19-1.16.26-1.75l21.26-8.2c.97-.43 1.9.24 1.53 1.73Z" />
     </svg>
   );
@@ -1411,7 +1411,7 @@ function TelegramGlyph() {
 // Official Viber bubble-with-handset (simple-icons path).
 function ViberGlyph() {
   return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <svg className="h-[14px] w-[14px] sm:h-4 sm:w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path d="M11.4 0C9.473.028 5.333.344 3.02 2.467 1.302 4.187.696 6.7.633 9.817.57 12.933.488 18.776 6.12 20.36h.003l-.004 2.416s-.037.977.61 1.177c.777.242 1.234-.5 1.98-1.302.407-.44.972-1.084 1.397-1.58 3.85.324 6.812-.416 7.15-.525.776-.252 5.176-.816 5.892-6.657.74-6.02-.36-9.83-2.34-11.546-.596-.55-3.006-2.3-8.375-2.323 0 0-.395-.025-1.037-.017zm.058 1.693c.545-.004.88.017.88.017 4.542.02 6.717 1.388 7.222 1.846 1.675 1.435 2.53 4.868 1.906 9.897v.002c-.596 4.876-4.17 5.184-4.83 5.396-.28.09-2.882.737-6.153.523 0 0-2.436 2.94-3.197 3.704-.12.12-.26.167-.352.144-.13-.033-.166-.188-.164-.414l.02-4.018c-4.762-1.32-4.485-6.292-4.43-8.895.054-2.604.543-4.738 1.996-6.173 1.96-1.773 5.474-2.018 7.11-2.03zm.38 2.602c-.167 0-.303.135-.303.302 0 .167.136.302.302.302 1.532 0 2.8.5 3.798 1.482.997.982 1.485 2.312 1.5 4.066.002.167.14.3.306.3h.002c.167 0 .3-.14.3-.306-.017-1.905-.552-3.402-1.68-4.512-1.126-1.11-2.564-1.634-4.226-1.634zm-3.4.937c-.184-.033-.378.003-.542.106l-.01.005c-.328.19-.628.435-.9.767-.014.02-.03.034-.042.05-.22.267-.347.53-.38.786-.02.152-.006.306.042.452l.017.012c.234.717.77 1.996 1.966 3.6.696.937 1.393 1.722 2.086 2.35.35.313.767.66 1.216.996l.13.09c.673.474 1.335.836 1.94 1.096 0 0 1.7.744 2.42.744.212 0 .458-.05.657-.19.267-.19.457-.42.6-.68v-.007c.146-.263.096-.514-.106-.68-.4-.34-1.03-.76-1.42-.99-.402-.238-.804-.09-.97.128l-.352.444c-.176.216-.5.187-.5.187l-.01.005c-2.375-.607-3.01-3.014-3.01-3.014s-.03-.323.19-.5l.442-.353c.212-.166.366-.568.128-.97-.23-.39-.65-1.02-.99-1.42-.148-.18-.36-.276-.583-.316zm4.49.324c-.167 0-.302.135-.302.302 0 .167.135.302.302.302 1.16.02 2.09.36 2.777 1.096.688.735 1.023 1.717 1.006 2.977 0 .167.133.303.3.305h.002c.166 0 .302-.133.304-.3.02-1.39-.36-2.55-1.166-3.41-.807-.862-1.936-1.252-3.223-1.272zm1.037 1.32c-.167 0-.302.136-.302.303 0 .167.135.302.302.302.523.01.937.164 1.216.457.28.293.43.717.44 1.28.002.166.14.3.305.3h.003c.167-.002.3-.14.3-.306-.013-.664-.202-1.213-.61-1.64-.406-.427-.96-.63-1.653-.643z" />
     </svg>
   );
