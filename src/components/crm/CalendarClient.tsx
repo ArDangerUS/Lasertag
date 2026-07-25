@@ -246,7 +246,7 @@ function WeekView({
     <div className="overflow-x-auto rounded-card bg-white thin-scroll">
       <div style={{ minWidth: 900 }}>
         {/* header */}
-        <div className="grid" style={{ gridTemplateColumns: "56px repeat(7, 1fr)" }}>
+        <div className="grid" style={{ gridTemplateColumns: "56px repeat(7, minmax(0, 1fr))" }}>
           <div />
           {days.map((d) => {
             const we = isWeekendISO(d);
@@ -273,7 +273,7 @@ function WeekView({
           <div
             key={h}
             className="grid border-t border-[#f0f0f0]"
-            style={{ gridTemplateColumns: "56px repeat(7, 1fr)", minHeight: 64 }}
+            style={{ gridTemplateColumns: "56px repeat(7, minmax(0, 1fr))", minHeight: 64 }}
           >
             <div className="flex items-start justify-end pr-2 pt-2 text-[12px] font-semibold text-[#999]">
               {h}:00
@@ -281,8 +281,8 @@ function WeekView({
             {days.map((d) => {
               const items = byCell[`${d}|${h}`] ?? [];
               return (
-                <div key={d} className="border-l border-[#f4f4f4] p-1.5">
-                  <div className="flex flex-col gap-1.5">
+                <div key={d} className="min-w-0 overflow-hidden border-l border-[#f4f4f4] p-1.5">
+                  <div className="flex min-w-0 flex-col gap-1.5">
                     {items.map((b) => (
                       <BookingChip key={b.id} b={b} onClick={() => onOpen(b)} />
                     ))}
@@ -305,7 +305,7 @@ function BookingChip({ b, onClick }: { b: CrmBooking; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="w-full rounded-lg px-2 py-1.5 text-left"
+      className="w-full min-w-0 overflow-hidden rounded-lg px-2 py-1.5 text-left"
       style={{ background: bg, borderLeft: `3px solid ${meta.color}` }}
     >
       <div
@@ -388,7 +388,7 @@ function DayView({
         <div style={{ minWidth: Math.max(700, 64 + locations.length * 220) }}>
           <div
             className="grid"
-            style={{ gridTemplateColumns: `64px repeat(${locations.length}, 1fr)` }}
+            style={{ gridTemplateColumns: `64px repeat(${locations.length}, minmax(0, 1fr))` }}
           >
             <div />
             {locations.map((l) => (
@@ -404,7 +404,7 @@ function DayView({
             <div
               key={h}
               className="grid border-t border-[#f0f0f0]"
-              style={{ gridTemplateColumns: `64px repeat(${locations.length}, 1fr)`, minHeight: 68 }}
+              style={{ gridTemplateColumns: `64px repeat(${locations.length}, minmax(0, 1fr))`, minHeight: 68 }}
             >
               <div className="flex items-start justify-end pr-2 pt-2 text-[12px] font-semibold text-[#999]">
                 {h}:00
@@ -412,7 +412,7 @@ function DayView({
               {locations.map((l) => {
                 const items = byCell[`${l.id}|${h}`] ?? [];
                 return (
-                  <div key={l.id} className="border-l border-[#f4f4f4] p-1.5">
+                  <div key={l.id} className="min-w-0 overflow-hidden border-l border-[#f4f4f4] p-1.5">
                     {items.length === 0 && canWrite ? (
                       <button
                         onClick={() => onCreate(l.id, h * 60)}
@@ -445,7 +445,7 @@ function DayChip({ b, onClick }: { b: CrmBooking; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="w-full rounded-lg px-2.5 py-2 text-left"
+      className="w-full min-w-0 overflow-hidden rounded-lg px-2.5 py-2 text-left"
       style={{ background: cancelled ? "#f3f3f3" : tint(meta.color), borderLeft: `3px solid ${meta.color}` }}
     >
       <div className="flex items-center justify-between gap-2">

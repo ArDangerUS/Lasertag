@@ -310,6 +310,7 @@ export default function BookingClient({
       price: number;
       people: number;
       priceOverride?: number; // explicit price sent to the server (arena closure)
+      arenaCombined?: boolean; // this line shows lasertag + arena closure as one
     };
     const items: CartItem[] = [];
 
@@ -407,22 +408,28 @@ export default function BookingClient({
       ? items.findIndex((i) => i.activityId === laserAct.id && i.durationMin === 60)
       : -1;
     const arenaApplied = arenaOn && arenaBlockIdx >= 0;
-    if (arenaApplied) {
+    if (arenaApplied && arenaAddon) {
+      // Show lasertag + closure as ONE combined line at the full arena price.
+      // The server still receives them separately (laser price 0 + the addon)
+      // so the CRM keeps a clear breakdown.
       const it = items[arenaBlockIdx];
-      it.price = 0;
+      it.title = `${it.title} · ${dict.arenaTag}`;
+      it.price = arenaAddon.price;
       it.priceOverride = 0;
-      it.sub = `${minToHHMM(it.startMin)}–${minToHHMM(it.startMin + it.durationMin)} · ${dict.arenaIncluded}`;
+      it.arenaCombined = true;
+      it.sub = `${minToHHMM(it.startMin)}–${minToHHMM(it.startMin + it.durationMin)} · ${dict.arenaAll}`;
     }
 
     const addons = catalog.addons
       .filter((ad) => (addonQty[ad.id] ?? 0) > 0)
-      // arena line shows only when it actually covers a lasertag hour
-      .filter((ad) => ad.key !== "arena" || arenaApplied)
+      // arena is rendered inside the combined lasertag line, never separately
+      .filter((ad) => ad.key !== "arena")
       .map((ad) => {
         const qty = addonQty[ad.id];
         const price = ad.tiers ? (ad.tiers[String(qty)] ?? ad.price * qty) : ad.price * qty;
         return { id: ad.id, title: ad.name, qty, price, tiered: !!ad.tiers };
       });
+    const arenaAddonId = arenaApplied && arenaAddon ? arenaAddon.id : null;
 
     // Selected package (if any) → concrete booking items at fixed price.
     let pkg: {
@@ -456,8 +463,8 @@ export default function BookingClient({
       items.reduce((s, i) => s + i.price, 0) +
       addons.reduce((s, a) => s + a.price, 0) +
       (pkg?.price ?? 0);
-    return { items, addons, pkg, total };
-  }, [picks, actById, people, dict, catalog.addons, catalog.packages, addonQty, pkgBooking, expandPackage, weekend, location.slug, date, locationId, priceRowsOf, priceFor]);
+    return { items, addons, pkg, total, arenaAddonId };
+  }, [picks, actById, people, dict, catalog.activities, catalog.addons, catalog.packages, addonQty, pkgBooking, expandPackage, weekend, location.slug, date, locationId, priceRowsOf, priceFor]);
 
   // Arena closure is only meaningful with a 1-hour lasertag block selected.
   const laserActId = useMemo(
@@ -517,7 +524,12 @@ export default function BookingClient({
           comment: cart.pkg ? `Комплекс: ${cart.pkg.name}` : "",
           lang: locale,
           items: [...individualItems, ...packageItems],
-          addons: cart.addons.map((a) => ({ addonId: a.id, qty: a.qty })),
+          addons: [
+            ...cart.addons.map((a) => ({ addonId: a.id, qty: a.qty })),
+            // arena closure is displayed inside the combined lasertag line but
+            // is stored as a separate addon for a clear CRM breakdown
+            ...(cart.arenaAddonId ? [{ addonId: cart.arenaAddonId, qty: 1 }] : []),
+          ],
         }),
       });
       const data = await res.json();
@@ -817,6 +829,7 @@ export default function BookingClient({
                             : "border border-[#E5E5E5] bg-white"
                       }`}
                     >
+                      <ActivityPhoto photo={a.photo} actKey={a.key} alt={a.name} />
                       <span className="flex items-center gap-2">
                         <span className="text-lg">{a.icon}</span>
                         <span className="flex-1 text-[13px] font-bold leading-tight">{a.name}</span>
@@ -1151,14 +1164,18 @@ export default function BookingClient({
                         title={`${it.icon} ${it.title}`}
                         sub={it.sub}
                         price={`${fmtMoney(it.price)} ${dict.uah}`}
-                        onRemove={() =>
+                        onRemove={() => {
                           setPicks((prev) =>
                             prev.filter(
                               (p) =>
                                 !(p.activityId === it.activityId && it.slotStarts.includes(p.startMin))
                             )
-                          )
-                        }
+                          );
+                          // removing the combined line also drops the closure
+                          if (it.arenaCombined && cart.arenaAddonId) {
+                            setAddonQty((q) => ({ ...q, [cart.arenaAddonId!]: 0 }));
+                          }
+                        }}
                       />
                     ))}
                     {cart.addons.map((ad) => (
@@ -1241,6 +1258,32 @@ function Field({
   );
 }
 
+// Photo for an activity card. Uses Activity.photo if set in the DB, otherwise
+// looks for public/activities/<key>.jpg by convention — drop a file there and
+// it appears automatically. Hidden entirely when neither exists.
+function ActivityPhoto({ photo, actKey, alt }: { photo: string; actKey: string; alt: string }) {
+  const [state, setState] = useState<"loading" | "ok" | "none">("loading");
+  const [src, setSrc] = useState(photo || `/activities/${actKey}.jpg`);
+  if (state === "none") return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={alt}
+      className={`mb-2 h-28 w-full rounded-xl object-cover ${state === "ok" ? "" : "hidden"}`}
+      onLoad={() => setState("ok")}
+      onError={() => {
+        // if the DB photo failed, try the convention path once
+        if (photo && src === photo) {
+          setSrc(`/activities/${actKey}.jpg`);
+          return;
+        }
+        setState("none");
+      }}
+    />
+  );
+}
+
 function Legend({ color, border, label }: { color: string; border?: string; label: string }) {
   return (
     <span className="flex items-center gap-1.5">
@@ -1283,24 +1326,31 @@ function CartRow({
   );
 }
 
-// Real club logo from lasertag.in.ua, with the drawn emblem as fallback if the
-// remote image fails to load (their host is client-reachable, our server proxy
-// can't fetch it to bundle locally).
-const REMOTE_LOGO = "https://www.lasertag.in.ua/wp-content/uploads/2026/04/logo4.svg";
+// Logo sources in priority order: the local file (put your logo at
+// public/logo-g75.svg and it wins automatically), then the live-site SVG,
+// then the drawn emblem as a last resort.
+const LOGO_SOURCES = [
+  "/logo-g75.svg",
+  "https://www.lasertag.in.ua/wp-content/uploads/2026/04/logo4.svg",
+];
 
 function BrandLogo() {
-  const [failed, setFailed] = useState(false);
+  const [srcIdx, setSrcIdx] = useState(0);
   const [loaded, setLoaded] = useState(false);
 
-  // If the remote logo hasn't loaded within 4s (blocked/hanging request),
-  // switch to the drawn emblem so the header never shows a broken image.
-  useEffect(() => {
-    if (loaded || failed) return;
-    const t = setTimeout(() => setFailed(true), 4000);
-    return () => clearTimeout(t);
-  }, [loaded, failed]);
+  const advance = () => {
+    setLoaded(false);
+    setSrcIdx((i) => i + 1);
+  };
 
-  if (failed) return <G75Logo />;
+  // A hanging request (blocked host) never fires onError — time it out.
+  useEffect(() => {
+    if (loaded || srcIdx >= LOGO_SOURCES.length) return;
+    const t = setTimeout(advance, 4000);
+    return () => clearTimeout(t);
+  }, [srcIdx, loaded]);
+
+  if (srcIdx >= LOGO_SOURCES.length) return <G75Logo />;
   return (
     <span className="relative inline-block h-[52px] w-[52px]">
       {!loaded && (
@@ -1310,14 +1360,14 @@ function BrandLogo() {
       )}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={REMOTE_LOGO}
+        src={LOGO_SOURCES[srcIdx]}
         alt="Лазертаг G-75"
         width={52}
         height={52}
         className="relative h-[52px] w-[52px] object-contain"
         style={{ opacity: loaded ? 1 : 0 }}
         onLoad={() => setLoaded(true)}
-        onError={() => setFailed(true)}
+        onError={advance}
       />
     </span>
   );
