@@ -9,12 +9,16 @@ export default async function SettingsPage() {
   const user = await getCurrentUser();
   if (!user || !can(user.role, "editCatalog")) redirect("/crm");
 
-  const [activities, locations] = await Promise.all([
+  const [activities, locations, addons] = await Promise.all([
     prisma.activity.findMany({
       orderBy: { sortOrder: "asc" },
       include: { prices: true, locations: true, photoBlob: { select: { updatedAt: true } } },
     }),
     prisma.location.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.addon.findMany({
+      orderBy: { sortOrder: "asc" },
+      include: { photoBlob: { select: { updatedAt: true } } },
+    }),
   ]);
 
   const locName = new Map(locations.map((l) => [l.id, l.name]));
@@ -43,6 +47,18 @@ export default async function SettingsPage() {
           priceWeekday: p.priceWeekday,
           priceWeekend: p.priceWeekend,
         })),
+      }))}
+      addons={addons.map((a) => ({
+        id: a.id,
+        key: a.key,
+        nameUk: a.nameUk,
+        nameRu: a.nameRu,
+        nameEn: a.nameEn,
+        subUk: a.subUk,
+        active: a.active,
+        price: a.price,
+        tiers: a.tiers ? (JSON.parse(a.tiers) as Record<string, number>) : null,
+        photoUrl: a.photoBlob ? `/api/addon-photos/${a.id}?v=${a.photoBlob.updatedAt.getTime()}` : "",
       }))}
     />
   );

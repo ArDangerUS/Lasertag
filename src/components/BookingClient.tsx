@@ -994,7 +994,10 @@ export default function BookingClient({
               <section className="rounded-card bg-white p-7 shadow-card">
                 <h2 className="mb-4 text-xl font-extrabold text-brand-ink">{dict.addonsTitle}</h2>
                 <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4">
-                  {catalog.addons.map((ad) => {
+                  {/* Плитки з фото йдуть першими (перший ряд), без фото — далі */}
+                  {[...catalog.addons]
+                    .sort((x, y) => (y.photo ? 1 : 0) - (x.photo ? 1 : 0))
+                    .map((ad) => {
                     const qty = addonQty[ad.id] ?? 0;
                     const on = qty > 0;
                     const tierKeys = ad.tiers
@@ -1020,6 +1023,14 @@ export default function BookingClient({
                               : "border-[#E5E5E5] bg-white"
                         }`}
                       >
+                        {ad.photo && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={ad.photo}
+                            alt={ad.name}
+                            className="mb-2.5 h-24 w-full rounded-xl object-cover"
+                          />
+                        )}
                         <span className="flex w-full items-start gap-2">
                           <span className="flex-1 text-[14px] font-bold leading-tight">{ad.name}</span>
                           <span

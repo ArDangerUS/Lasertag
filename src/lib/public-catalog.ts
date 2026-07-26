@@ -56,6 +56,7 @@ export type PubAddon = {
   sub: string;
   price: number; // 0 => "ціна уточнюється"
   tiers: Record<string, number> | null; // qty -> price (photographer hours)
+  photo: string; // uploaded via CRM ("" = none; tile renders without photo)
 };
 
 export type PubPackageItem = { activityId: string; durationMin: number; order: number; parallel: boolean };
@@ -91,7 +92,11 @@ export async function loadPublicCatalog(locale: Locale): Promise<PublicCatalog> 
         photoBlob: { select: { updatedAt: true } },
       },
     }),
-    prisma.addon.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
+    prisma.addon.findMany({
+      where: { active: true },
+      orderBy: { sortOrder: "asc" },
+      include: { photoBlob: { select: { updatedAt: true } } },
+    }),
     prisma.package.findMany({
       where: { active: true },
       orderBy: { sortOrder: "asc" },
@@ -141,6 +146,7 @@ export async function loadPublicCatalog(locale: Locale): Promise<PublicCatalog> 
       sub: localizedSub(a, locale),
       price: a.price,
       tiers: a.tiers ? (JSON.parse(a.tiers) as Record<string, number>) : null,
+      photo: a.photoBlob ? `/api/addon-photos/${a.id}?v=${a.photoBlob.updatedAt.getTime()}` : "",
     })),
     packages: packages.map((p) => ({
       id: p.id,

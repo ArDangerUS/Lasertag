@@ -30,14 +30,29 @@ type Act = {
   prices: Price[];
 };
 
+type AddonRow = {
+  id: string;
+  key: string;
+  nameUk: string;
+  nameRu: string;
+  nameEn: string;
+  subUk: string;
+  active: boolean;
+  price: number; // 0 = «ціна уточнюється»
+  tiers: Record<string, number> | null; // кількість (год) -> ціна
+  photoUrl: string; // "" = фото не завантажене
+};
+
 const UNLIMITED = 999; // maxPeople 999 = без обмежень
 
 export default function SettingsClient({
   activities,
   locations,
+  addons,
 }: {
   activities: Act[];
   locations: Loc[];
+  addons: AddonRow[];
 }) {
   const [showCreate, setShowCreate] = useState(false);
   return (
@@ -63,6 +78,21 @@ export default function SettingsClient({
       {activities.map((a) => (
         <ActivityCard key={a.id} act={a} locations={locations} />
       ))}
+
+      {addons.length > 0 && (
+        <>
+          <div className="mt-4 rounded-card bg-[#161616] p-6">
+            <h2 className="text-[18px] font-extrabold">Додаткові послуги</h2>
+            <p className="text-[13px] text-[#888]">
+              Блок «Додайте до свята» на сайті: ціни, назви 3 мовами і фото. Плитки з фото сайт
+              показує першим рядом, без фото — далі. Ціна 0 = «ціна уточнюється».
+            </p>
+          </div>
+          {addons.map((a) => (
+            <AddonCard key={a.id} addon={a} />
+          ))}
+        </>
+      )}
     </div>
   );
 }
@@ -667,6 +697,250 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
           className="rounded-full bg-[#56EF02] px-5 py-2.5 text-[13px] font-bold text-[#1A1A1A]"
         >
           Зберегти розвагу
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- addon card («Додайте до свята») ---------------- */
+
+function AddonCard({ addon }: { addon: AddonRow }) {
+  const [active, setActive] = useState(addon.active);
+  const [names, setNames] = useState({ uk: addon.nameUk, ru: addon.nameRu, en: addon.nameEn });
+  // Ціни як рядки, щоб можна було повністю стерти під час вводу
+  const [priceStr, setPriceStr] = useState(String(addon.price));
+  const [savedPrice, setSavedPrice] = useState(addon.price);
+  const [tierStrs, setTierStrs] = useState<Record<string, string>>(
+    Object.fromEntries(Object.entries(addon.tiers ?? {}).map(([q, p]) => [q, String(p)]))
+  );
+  const [savedTiers, setSavedTiers] = useState<Record<string, number>>(addon.tiers ?? {});
+  const [photoUrl, setPhotoUrl] = useState(addon.photoUrl);
+  const [savedFlash, setSavedFlash] = useState("");
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const hasTiers = addon.tiers !== null;
+
+  function flash(msg: string) {
+    setSavedFlash(msg);
+    setTimeout(() => setSavedFlash(""), 1800);
+  }
+
+  const parseOr = (s: string, fallback: number) => {
+    const n = parseInt(s, 10);
+    return Number.isFinite(n) && n >= 0 ? n : fallback;
+  };
+
+  async function save() {
+    const price = parseOr(priceStr, savedPrice);
+    const tiers = hasTiers
+      ? Object.fromEntries(
+          Object.entries(tierStrs).map(([q, s]) => [q, parseOr(s, savedTiers[q] ?? 0)])
+        )
+      : undefined;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/crm/addons/${addon.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          active,
+          nameUk: names.uk,
+          nameRu: names.ru,
+          nameEn: names.en,
+          price,
+          ...(tiers ? { tiers } : {}),
+        }),
+      });
+      if (!res.ok) throw new Error();
+      setSavedPrice(price);
+      setPriceStr(String(price));
+      if (tiers) {
+        setSavedTiers(tiers);
+        setTierStrs(Object.fromEntries(Object.entries(tiers).map(([q, p]) => [q, String(p)])));
+      }
+      flash("Збережено ✓");
+    } catch {
+      flash("Помилка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function uploadPhoto(file: File) {
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`/api/crm/addons/${addon.id}/photo`, { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Помилка");
+      setPhotoUrl(data.photoUrl);
+      flash("Фото збережено ✓");
+    } catch (e: any) {
+      alert(e?.message || "Помилка завантаження");
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  async function removePhoto() {
+    if (!confirm(`Видалити фото «${addon.nameUk}»? Плитка на сайті повернеться в ряд без фото.`)) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/crm/addons/${addon.id}/photo`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Помилка");
+      setPhotoUrl("");
+      flash("Фото видалено ✓");
+    } catch (e: any) {
+      alert(e?.message || "Помилка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const inputCls =
+    "w-full rounded-lg border border-[#333] bg-[#0e0e0e] px-3 py-2 text-[14px] text-white";
+
+  return (
+    <div className="rounded-card bg-[#161616] p-6">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <span className="text-[16px] font-extrabold">{names.uk}</span>
+        {addon.subUk && (
+          <span className="rounded-full bg-[#0e0e0e] px-2.5 py-1 text-[11px] text-[#888]">
+            {addon.subUk}
+          </span>
+        )}
+        <label className="ml-auto flex cursor-pointer items-center gap-2 text-[13px]">
+          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+          <span className={active ? "text-[#3cba54]" : "text-[#888]"}>
+            {active ? "Доступна" : "Прихована"}
+          </span>
+        </label>
+        {savedFlash && <span className="text-[12px] text-[#56EF02]">{savedFlash}</span>}
+      </div>
+
+      {/* photo */}
+      <div className="mb-4">
+        <div className="mb-1.5 text-[11px] font-bold uppercase text-[#777]">Фото на сайті</div>
+        <div className="flex flex-wrap items-center gap-4">
+          {photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={photoUrl}
+              src={photoUrl}
+              alt={addon.nameUk}
+              className="h-[72px] w-32 rounded-xl border border-[#333] object-cover"
+            />
+          ) : (
+            <div className="flex h-[72px] w-32 items-center justify-center rounded-xl border border-dashed border-[#333] bg-[#0e0e0e] text-[11px] text-[#666]">
+              немає фото
+            </div>
+          )}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={busy}
+                className="rounded-full bg-[#0e0e0e] px-3.5 py-1.5 text-[12px] font-semibold text-white ring-1 ring-[#333] transition hover:ring-[#56EF02]"
+              >
+                {photoUrl ? "Замінити фото" : "Завантажити фото"}
+              </button>
+              {photoUrl && (
+                <button
+                  onClick={removePhoto}
+                  disabled={busy}
+                  className="rounded-full bg-[#0e0e0e] px-3.5 py-1.5 text-[12px] font-semibold text-[#ff6b6b] ring-1 ring-[#333] transition hover:ring-[#ff6b6b]"
+                >
+                  Видалити
+                </button>
+              )}
+            </div>
+            <span className="text-[11px] text-[#666]">
+              {photoUrl
+                ? "На сайті ця плитка показується у першому ряду (з фото)"
+                : "Без фото плитка показується у другому ряду — JPG, PNG або WebP до 5 МБ"}
+            </span>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) uploadPhoto(f);
+            }}
+          />
+        </div>
+      </div>
+
+      {/* names */}
+      <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+        {(["uk", "ru", "en"] as const).map((lng) => (
+          <div key={lng}>
+            <div className="mb-1 text-[11px] font-bold uppercase text-[#777]">Назва {lng}</div>
+            <input
+              value={names[lng]}
+              onChange={(e) => setNames((n) => ({ ...n, [lng]: e.target.value }))}
+              className={inputCls}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* price / tiers */}
+      {hasTiers ? (
+        <div className="mb-4">
+          <div className="mb-1.5 text-[11px] font-bold uppercase text-[#777]">
+            Тарифи за кількість годин, грн
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {Object.keys(savedTiers)
+              .sort((a, b) => Number(a) - Number(b))
+              .map((q) => (
+                <label key={q} className="flex items-center gap-2 text-[13px]">
+                  <span className="text-[#888]">{q} год</span>
+                  <input
+                    value={tierStrs[q] ?? ""}
+                    onChange={(e) => setTierStrs((t) => ({ ...t, [q]: e.target.value }))}
+                    onBlur={() =>
+                      setTierStrs((t) => ({
+                        ...t,
+                        [q]: String(parseOr(t[q] ?? "", savedTiers[q] ?? 0)),
+                      }))
+                    }
+                    inputMode="numeric"
+                    className={`${inputCls} w-24 text-right`}
+                  />
+                </label>
+              ))}
+          </div>
+        </div>
+      ) : (
+        <div className="mb-4 max-w-[240px]">
+          <div className="mb-1.5 text-[11px] font-bold uppercase text-[#777]">
+            Ціна, грн (0 = «ціна уточнюється»)
+          </div>
+          <input
+            value={priceStr}
+            onChange={(e) => setPriceStr(e.target.value)}
+            onBlur={() => setPriceStr(String(parseOr(priceStr, savedPrice)))}
+            inputMode="numeric"
+            className={`${inputCls} text-right`}
+          />
+        </div>
+      )}
+
+      <div className="flex justify-end">
+        <button
+          onClick={save}
+          disabled={busy}
+          className="rounded-full bg-[#56EF02] px-5 py-2.5 text-[13px] font-bold text-[#1A1A1A] disabled:opacity-60"
+        >
+          Зберегти
         </button>
       </div>
     </div>

@@ -164,6 +164,17 @@ model Addon {
   sortOrder Int    @default(0)
   active   Boolean @default(true)
   bookingAddons BookingAddon[]
+  photoBlob AddonPhotoBlob?
+}
+
+// Uploaded addon photo (same idea as ActivityPhotoBlob): bytes live in the
+// DB, catalog queries only read the timestamp.
+model AddonPhotoBlob {
+  addonId   String   @id
+  addon     Addon    @relation(fields: [addonId], references: [id], onDelete: Cascade)
+  data      Bytes
+  mime      String
+  updatedAt DateTime @updatedAt
 }
 
 // A complex offer / bundle (e.g. "Комплекс Сталкер"): an ordered list of
