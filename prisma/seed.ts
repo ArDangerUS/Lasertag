@@ -38,6 +38,9 @@ async function main() {
   for (const l of LOCATIONS) {
     const loc = await prisma.location.create({
       data: {
+        // Стабільний id: після повторного сіда (рестарт на Heroku) посилання
+        // зі старих вкладок браузера залишаються робочими.
+        id: `loc-${l.slug}`,
         slug: l.slug,
         name: l.name,
         address: l.address,
@@ -59,6 +62,7 @@ async function main() {
     const r = ROOMS[i];
     const room = await prisma.room.create({
       data: {
+        id: `room-${r.loc}-${r.key}`,
         locationId: locBySlug[r.loc],
         key: r.key,
         name: r.name,
@@ -75,6 +79,7 @@ async function main() {
   for (const a of ACTIVITIES) {
     const act = await prisma.activity.create({
       data: {
+        id: `act-${a.key}`,
         key: a.key,
         category: a.category,
         nameUk: a.nameUk,
@@ -138,7 +143,7 @@ async function main() {
   for (const ad of ADDONS) {
     const { tiers, ...rest } = ad as typeof ad & { tiers?: Record<number, number> };
     await prisma.addon.create({
-      data: { ...rest, tiers: tiers ? JSON.stringify(tiers) : "" },
+      data: { id: `addon-${ad.key}`, ...rest, tiers: tiers ? JSON.stringify(tiers) : "" },
     });
   }
   console.log(`  ${ADDONS.length} addons`);
@@ -147,6 +152,7 @@ async function main() {
   for (const p of PACKAGES) {
     const pkg = await prisma.package.create({
       data: {
+        id: `pkg-${p.key}`,
         key: p.key,
         locationId: locBySlug[p.locationSlug],
         nameUk: p.nameUk,
@@ -181,6 +187,7 @@ async function main() {
   const adminPass = process.env.SEED_ADMIN_PASSWORD || "admin12345";
   const admin = await prisma.user.create({
     data: {
+      id: "user-admin",
       email: adminEmail,
       name: "Адміністратор",
       passwordHash: await bcrypt.hash(adminPass, 10),
@@ -189,6 +196,7 @@ async function main() {
   });
   const manager = await prisma.user.create({
     data: {
+      id: "user-manager",
       email: "manager@g75.local",
       name: "Менеджер Оля",
       passwordHash: await bcrypt.hash("manager12345", 10),
@@ -197,6 +205,7 @@ async function main() {
   });
   await prisma.user.create({
     data: {
+      id: "user-viewer",
       email: "viewer@g75.local",
       name: "Перегляд",
       passwordHash: await bcrypt.hash("viewer12345", 10),
