@@ -32,8 +32,12 @@ async function send(chatId: string, text: string): Promise<void> {
 }
 
 export async function notifyManagersNewBooking(bookingId: string): Promise<void> {
-  const chat = process.env.TELEGRAM_MANAGER_CHAT_ID || "";
-  if (!chat) return;
+  // Один chat ID або кілька через кому: "123, -100456, 789"
+  const chats = (process.env.TELEGRAM_MANAGER_CHAT_ID || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!chats.length) return;
   const b = await prisma.booking.findUnique({
     where: { id: bookingId },
     include: { location: true, items: true, addons: true },
@@ -55,7 +59,7 @@ export async function notifyManagersNewBooking(bookingId: string): Promise<void>
     (addons ? `\nДодатки:\n${addons}\n` : "") +
     `\n💰 <b>${b.totalPrice} грн</b>`;
 
-  await send(chat, text);
+  await Promise.all(chats.map((c) => send(c, text)));
 }
 
 // Webhook processing: the bot receives /start <code> from a client. We link the
