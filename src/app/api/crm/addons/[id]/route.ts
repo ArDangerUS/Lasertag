@@ -82,3 +82,36 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   return NextResponse.json({ ok: true });
 }
+
+// Delete an addon. Blocked while bookings reference it — hide it instead.
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const user = await getCurrentUser();
+  if (!user || !can(user.role, "editCatalog")) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  const addon = await prisma.addon.findUnique({
+    where: { id: params.id },
+    include: { _count: { select: { bookingAddons: true } } },
+  });
+  if (!addon) return NextResponse.json({ error: "Не знайдено" }, { status: 404 });
+  if (addon._count.bookingAddons > 0) {
+    return NextResponse.json(
+      {
+        error: `«${addon.nameUk}» використовується у ${addon._count.bookingAddons} бронюваннях. Замість видалення приховайте її (зніміть галочку «Доступна»).`,
+      },
+      { status: 409 }
+    );
+  }
+
+  await prisma.addon.delete({ where: { id: params.id } });
+  await audit({
+    actor: user,
+    action: "DELETE",
+    entity: "Додаткова послуга",
+    entityId: addon.id,
+    summary: `видалив(-ла) послугу «${addon.nameUk}»`,
+  });
+
+  return NextResponse.json({ ok: true });
+}

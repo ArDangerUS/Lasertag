@@ -1,5 +1,34 @@
 # Деплой на Heroku (тестова версія)
 
+## Варіант без термінала (через сайт Heroku)
+
+1. Зареєструйтесь / увійдіть на [dashboard.heroku.com](https://dashboard.heroku.com).
+   Знадобиться підписка Eco ($5/міс за всі eco-дини) або Basic — безплатного
+   тарифу в Heroku більше немає.
+2. **New → Create new app** → назва (наприклад `g75-booking-test`), регіон Europe.
+3. Вкладка **Deploy** → Deployment method: **GitHub** → Connect to GitHub →
+   авторизуйте акаунт → знайдіть репозиторій `Lasertag` → **Connect**.
+4. Вкладка **Settings** → **Reveal Config Vars** → додайте по черзі:
+
+   | KEY | VALUE |
+   | --- | --- |
+   | `DATABASE_URL` | `file:./dev.db` |
+   | `AUTH_SECRET` | довільний довгий випадковий рядок (40+ символів) |
+   | `NPM_CONFIG_PRODUCTION` | `false` |
+   | `NEXT_PUBLIC_PHONE` | `+380963940288` |
+   | `NEXT_PUBLIC_VIBER_URL` | `viber://chat?number=%2B380963940288` |
+   | `NEXT_PUBLIC_TELEGRAM_URL` | `https://t.me/g75lasertag_bot` |
+
+5. Назад у **Deploy** → розділ Manual deploy → оберіть гілку `main` →
+   **Deploy Branch**. Дочекайтесь «Your app was successfully deployed».
+   Тут же можна ввімкнути **Enable Automatic Deploys** — тоді кожен push
+   у `main` деплоїтиметься сам.
+6. **Open app** зверху праворуч — це публічний сайт. CRM:
+   `https://<назва>.herokuapp.com/crm` (admin@g75.local / admin12345).
+7. Логи без термінала: **More → View logs** (кнопка зверху праворуч).
+
+Далі — той самий процес через термінал (альтернатива).
+
 Тестовий режим = SQLite прямо на дині (dyno). **Увага:** файлова система
 Heroku тимчасова — база скидається до демо-стану при кожному рестарті
 дини (деплой, `heroku restart`, автоматичний рестарт раз на добу). Для

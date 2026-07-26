@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { localizedName, localizedDesc, localizedSub } from "./i18n";
+import { publicFilePhoto } from "./photo-files";
 import type { Locale } from "./constants";
 
 function perksFor(
@@ -146,7 +147,9 @@ export async function loadPublicCatalog(locale: Locale): Promise<PublicCatalog> 
       sub: localizedSub(a, locale),
       price: a.price,
       tiers: a.tiers ? (JSON.parse(a.tiers) as Record<string, number>) : null,
-      photo: a.photoBlob ? `/api/addon-photos/${a.id}?v=${a.photoBlob.updatedAt.getTime()}` : "",
+      photo: a.photoBlob
+        ? `/api/addon-photos/${a.id}?v=${a.photoBlob.updatedAt.getTime()}`
+        : publicFilePhoto("addons", a.key),
     })),
     packages: packages.map((p) => ({
       id: p.id,

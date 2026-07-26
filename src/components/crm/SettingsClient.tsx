@@ -40,7 +40,8 @@ type AddonRow = {
   active: boolean;
   price: number; // 0 = «ціна уточнюється»
   tiers: Record<string, number> | null; // кількість (год) -> ціна
-  photoUrl: string; // "" = фото не завантажене
+  photoUrl: string; // "" = фото не завантажене через CRM
+  filePhoto: string; // готовий файл public/addons/<key>.* ("" = немає)
 };
 
 const UNLIMITED = 999; // maxPeople 999 = без обмежень
@@ -54,45 +55,136 @@ export default function SettingsClient({
   locations: Loc[];
   addons: AddonRow[];
 }) {
+  const [tab, setTab] = useState<"acts" | "addons">("acts");
   const [showCreate, setShowCreate] = useState(false);
+
+  const tabCls = (on: boolean) =>
+    `rounded-full px-4 py-2 text-[13px] font-bold transition ${
+      on ? "bg-[#56EF02] text-[#1A1A1A]" : "bg-[#0e0e0e] text-[#ccc] ring-1 ring-[#333]"
+    }`;
+
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-card bg-[#161616] p-6">
+        {/* tab switcher */}
+        <div className="mb-4 flex gap-2">
+          <button onClick={() => { setTab("acts"); setShowCreate(false); }} className={tabCls(tab === "acts")}>
+            🎯 Розваги
+          </button>
+          <button onClick={() => { setTab("addons"); setShowCreate(false); }} className={tabCls(tab === "addons")}>
+            🎁 Додаткові послуги
+          </button>
+        </div>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex-1">
-            <h2 className="text-[18px] font-extrabold">Розваги і ціни</h2>
-            <p className="text-[13px] text-[#888]">
-              Ціни (будні / вихідні), назви 3 мовами, локації та кількість кімнат/арен на кожній
-              (скільки груп паралельно), розмір груп. «∞» = без обмежень. Кожна зміна — у журналі.
-            </p>
+            {tab === "acts" ? (
+              <>
+                <h2 className="text-[18px] font-extrabold">Розваги і ціни</h2>
+                <p className="text-[13px] text-[#888]">
+                  Ціни (будні / вихідні), назви 3 мовами, локації та кількість кімнат/арен на кожній
+                  (скільки груп паралельно), розмір груп. «∞» = без обмежень. Кожна зміна — у журналі.
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 className="text-[18px] font-extrabold">Додаткові послуги</h2>
+                <p className="text-[13px] text-[#888]">
+                  Блок «Додайте до свята» на сайті: ціни, назви 3 мовами і фото. Плитки з фото сайт
+                  показує першим рядом, без фото — далі. Ціна 0 = «ціна уточнюється».
+                </p>
+              </>
+            )}
           </div>
           <button
             onClick={() => setShowCreate((s) => !s)}
             className="rounded-full bg-[#56EF02] px-4 py-2.5 text-[13px] font-bold text-[#1A1A1A]"
           >
-            {showCreate ? "Скасувати" : "+ Нова розвага"}
+            {showCreate ? "Скасувати" : tab === "acts" ? "+ Нова розвага" : "+ Нова послуга"}
           </button>
         </div>
-        {showCreate && <CreateActivityForm locations={locations} onDone={() => setShowCreate(false)} />}
+        {showCreate && tab === "acts" && (
+          <CreateActivityForm locations={locations} onDone={() => setShowCreate(false)} />
+        )}
+        {showCreate && tab === "addons" && <CreateAddonForm onDone={() => setShowCreate(false)} />}
       </div>
-      {activities.map((a) => (
-        <ActivityCard key={a.id} act={a} locations={locations} />
-      ))}
 
-      {addons.length > 0 && (
-        <>
-          <div className="mt-4 rounded-card bg-[#161616] p-6">
-            <h2 className="text-[18px] font-extrabold">Додаткові послуги</h2>
-            <p className="text-[13px] text-[#888]">
-              Блок «Додайте до свята» на сайті: ціни, назви 3 мовами і фото. Плитки з фото сайт
-              показує першим рядом, без фото — далі. Ціна 0 = «ціна уточнюється».
-            </p>
-          </div>
-          {addons.map((a) => (
-            <AddonCard key={a.id} addon={a} />
-          ))}
-        </>
-      )}
+      {tab === "acts" &&
+        activities.map((a) => <ActivityCard key={a.id} act={a} locations={locations} />)}
+      {tab === "addons" && addons.map((a) => <AddonCard key={a.id} addon={a} />)}
+    </div>
+  );
+}
+
+/* ---------------- create addon form ---------------- */
+
+function CreateAddonForm({ onDone }: { onDone: () => void }) {
+  const router = useRouter();
+  const [nameUk, setNameUk] = useState("");
+  const [nameRu, setNameRu] = useState("");
+  const [nameEn, setNameEn] = useState("");
+  const [subUk, setSubUk] = useState("");
+  const [price, setPrice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const inputCls = "w-full rounded-lg border border-[#333] bg-[#0e0e0e] px-3 py-2 text-[14px] text-white";
+
+  async function create() {
+    setError("");
+    if (!nameUk.trim()) return setError("Вкажіть назву (укр)");
+    const p = price.trim() === "" ? 0 : parseInt(price, 10);
+    if (!Number.isFinite(p) || p < 0) return setError("Перевірте ціну");
+    setBusy(true);
+    try {
+      const res = await fetch("/api/crm/addons", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nameUk, nameRu, nameEn, subUk, price: p }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Помилка");
+      onDone();
+      router.refresh();
+    } catch (e: any) {
+      setError(e?.message || "Помилка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-[#2a2a2a] bg-[#0e0e0e] p-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <input placeholder="Назва (укр) *" value={nameUk} onChange={(e) => setNameUk(e.target.value)} className={inputCls} />
+        <input placeholder="Назва (рос)" value={nameRu} onChange={(e) => setNameRu(e.target.value)} className={inputCls} />
+        <input placeholder="Назва (англ)" value={nameEn} onChange={(e) => setNameEn(e.target.value)} className={inputCls} />
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+        <input
+          placeholder="Короткий опис (укр), напр. «2 години · 1 аніматор»"
+          value={subUk}
+          onChange={(e) => setSubUk(e.target.value)}
+          className={`${inputCls} md:col-span-2`}
+        />
+        <input
+          placeholder="Ціна, грн (0 = «ціна уточнюється»)"
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          inputMode="numeric"
+          className={inputCls}
+        />
+      </div>
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          onClick={create}
+          disabled={busy}
+          className="rounded-full bg-[#56EF02] px-5 py-2.5 text-[13px] font-bold text-[#1A1A1A] disabled:opacity-60"
+        >
+          Створити послугу
+        </button>
+        <span className="text-[12px] text-[#888]">Фото можна буде завантажити в картці після створення.</span>
+        {error && <span className="text-[12px] text-[#ff6b6b]">{error}</span>}
+      </div>
     </div>
   );
 }
@@ -706,6 +798,7 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
 /* ---------------- addon card («Додайте до свята») ---------------- */
 
 function AddonCard({ addon }: { addon: AddonRow }) {
+  const router = useRouter();
   const [active, setActive] = useState(addon.active);
   const [names, setNames] = useState({ uk: addon.nameUk, ru: addon.nameRu, en: addon.nameEn });
   // Ціни як рядки, щоб можна було повністю стерти під час вводу
@@ -785,6 +878,20 @@ function AddonCard({ addon }: { addon: AddonRow }) {
     }
   }
 
+  async function removeAddon() {
+    if (!confirm(`Видалити послугу «${addon.nameUk}»? Цю дію не можна буде скасувати.`)) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/crm/addons/${addon.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Помилка");
+      router.refresh();
+    } catch (e: any) {
+      alert(e?.message || "Помилка");
+      setBusy(false);
+    }
+  }
+
   async function removePhoto() {
     if (!confirm(`Видалити фото «${addon.nameUk}»? Плитка на сайті повернеться в ряд без фото.`)) return;
     setBusy(true);
@@ -826,11 +933,11 @@ function AddonCard({ addon }: { addon: AddonRow }) {
       <div className="mb-4">
         <div className="mb-1.5 text-[11px] font-bold uppercase text-[#777]">Фото на сайті</div>
         <div className="flex flex-wrap items-center gap-4">
-          {photoUrl ? (
+          {photoUrl || addon.filePhoto ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              key={photoUrl}
-              src={photoUrl}
+              key={photoUrl || addon.filePhoto}
+              src={photoUrl || addon.filePhoto}
               alt={addon.nameUk}
               className="h-[72px] w-32 rounded-xl border border-[#333] object-cover"
             />
@@ -860,8 +967,10 @@ function AddonCard({ addon }: { addon: AddonRow }) {
             </div>
             <span className="text-[11px] text-[#666]">
               {photoUrl
-                ? "На сайті ця плитка показується у першому ряду (з фото)"
-                : "Без фото плитка показується у другому ряду — JPG, PNG або WebP до 5 МБ"}
+                ? "Завантажено через CRM — плитка у першому ряду (з фото)"
+                : addon.filePhoto
+                  ? `Стандартний файл із сайту (${addon.filePhoto.slice(1)}) — плитка у першому ряду`
+                  : `Без фото плитка у другому ряду. Завантажте JPG/PNG/WebP до 5 МБ або покладіть файл public/addons/${addon.key}.jpg`}
             </span>
           </div>
           <input
@@ -934,7 +1043,14 @@ function AddonCard({ addon }: { addon: AddonRow }) {
         </div>
       )}
 
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        <button
+          onClick={removeAddon}
+          disabled={busy}
+          className="rounded-full border border-[#5b2222] px-4 py-2 text-[13px] font-bold text-[#ff6b6b] transition hover:bg-[#2a1212] disabled:opacity-60"
+        >
+          Видалити
+        </button>
         <button
           onClick={save}
           disabled={busy}

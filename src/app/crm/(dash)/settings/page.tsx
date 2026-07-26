@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser, can } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import SettingsClient from "@/components/crm/SettingsClient";
+import { publicFilePhoto } from "@/lib/photo-files";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,7 @@ export default async function SettingsPage() {
         price: a.price,
         tiers: a.tiers ? (JSON.parse(a.tiers) as Record<string, number>) : null,
         photoUrl: a.photoBlob ? `/api/addon-photos/${a.id}?v=${a.photoBlob.updatedAt.getTime()}` : "",
+        filePhoto: publicFilePhoto("addons", a.key),
       }))}
     />
   );
