@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import type { PublicCatalog, PubActivity } from "@/lib/public-catalog";
 import type { Dict } from "@/lib/i18n";
 import type { Locale } from "@/lib/constants";
@@ -1272,10 +1272,19 @@ function ActivityPhoto({ photo, actKey, alt }: { photo: string; actKey: string; 
   }, [photo, actKey]);
   const [idx, setIdx] = useState(0);
   const [ok, setOk] = useState(false);
+  const ref = useRef<HTMLImageElement>(null);
+  // SSR: якщо картинка завантажилась до гідратації, onLoad/onError вже не спрацюють
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !el.complete) return;
+    if (el.naturalWidth > 0) setOk(true);
+    else setIdx((i) => i + 1);
+  }, [idx]);
   if (idx >= candidates.length) return null;
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
+      ref={ref}
       src={candidates[idx]}
       alt={alt}
       className={`mb-2 h-28 w-full rounded-xl object-cover ${ok ? "" : "hidden"}`}
