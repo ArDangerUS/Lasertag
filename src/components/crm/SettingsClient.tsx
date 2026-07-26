@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Price = {
@@ -21,6 +21,7 @@ type Act = {
   nameEn: string;
   icon: string;
   active: boolean;
+  photoUrl: string; // "" = немає завантаженого фото (сайт бере /activities/<key>.jpg)
   perPerson: boolean;
   minPeople: number;
   maxPeople: number;
@@ -262,6 +263,11 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
   );
   const [savedFlash, setSavedFlash] = useState("");
   const [busy, setBusy] = useState(false);
+  // фото: photoUrl = завантажене через CRM; інакше сайт показує /activities/<key>.jpg
+  const [photoUrl, setPhotoUrl] = useState(act.photoUrl);
+  const [previewBroken, setPreviewBroken] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const previewSrc = photoUrl || `/activities/${act.key}.jpg`;
 
   function flash(msg: string) {
     setSavedFlash(msg);
@@ -334,6 +340,43 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
     }
   }
 
+  async function uploadPhoto(file: File) {
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`/api/crm/activities/${act.id}/photo`, { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Помилка");
+      setPhotoUrl(data.photoUrl);
+      setPreviewBroken(false);
+      flash("Фото збережено ✓");
+    } catch (e: any) {
+      alert(e?.message || "Помилка завантаження");
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  async function removePhoto() {
+    if (!confirm(`Видалити завантажене фото «${act.nameUk}»? Сайт повернеться до стандартного фото, якщо воно є.`))
+      return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/crm/activities/${act.id}/photo`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Помилка");
+      setPhotoUrl("");
+      setPreviewBroken(false);
+      flash("Фото видалено ✓");
+    } catch (e: any) {
+      alert(e?.message || "Помилка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function removeActivity() {
     if (!confirm(`Видалити розвагу «${act.nameUk}»? Цю дію не можна буде скасувати.`)) return;
     setBusy(true);
@@ -363,6 +406,64 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
           </span>
         </label>
         {savedFlash && <span className="text-[12px] text-[#56EF02]">{savedFlash}</span>}
+      </div>
+
+      {/* photo */}
+      <div className="mb-4">
+        <div className="mb-1.5 text-[11px] font-bold uppercase text-[#777]">Фото на сайті</div>
+        <div className="flex flex-wrap items-center gap-4">
+          {previewBroken ? (
+            <div className="flex h-[72px] w-32 items-center justify-center rounded-xl border border-dashed border-[#333] bg-[#0e0e0e] text-[11px] text-[#666]">
+              немає фото
+            </div>
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={previewSrc}
+              src={previewSrc}
+              alt={act.nameUk}
+              className="h-[72px] w-32 rounded-xl border border-[#333] object-cover"
+              onError={() => setPreviewBroken(true)}
+            />
+          )}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={busy}
+                className="rounded-full bg-[#0e0e0e] px-3.5 py-1.5 text-[12px] font-semibold text-white ring-1 ring-[#333] transition hover:ring-[#56EF02]"
+              >
+                {photoUrl ? "Замінити фото" : "Завантажити фото"}
+              </button>
+              {photoUrl && (
+                <button
+                  onClick={removePhoto}
+                  disabled={busy}
+                  className="rounded-full bg-[#0e0e0e] px-3.5 py-1.5 text-[12px] font-semibold text-[#ff6b6b] ring-1 ring-[#333] transition hover:ring-[#ff6b6b]"
+                >
+                  Видалити
+                </button>
+              )}
+            </div>
+            <span className="text-[11px] text-[#666]">
+              {photoUrl
+                ? "Завантажено через CRM"
+                : previewBroken
+                  ? "Фото ще не додано — завантажте JPG, PNG або WebP (до 5 МБ)"
+                  : `Стандартне фото з сайту (activities/${act.key}.jpg)`}
+            </span>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) uploadPhoto(f);
+            }}
+          />
+        </div>
       </div>
 
       {/* names */}

@@ -12,7 +12,7 @@ export default async function SettingsPage() {
   const [activities, locations] = await Promise.all([
     prisma.activity.findMany({
       orderBy: { sortOrder: "asc" },
-      include: { prices: true, locations: true },
+      include: { prices: true, locations: true, photoBlob: { select: { updatedAt: true } } },
     }),
     prisma.location.findMany({ orderBy: { sortOrder: "asc" } }),
   ]);
@@ -30,6 +30,7 @@ export default async function SettingsPage() {
         nameEn: a.nameEn,
         icon: a.icon,
         active: a.active,
+        photoUrl: a.photoBlob ? `/api/photos/${a.id}?v=${a.photoBlob.updatedAt.getTime()}` : "",
         perPerson: a.perPerson,
         minPeople: a.minPeople,
         maxPeople: a.maxPeople,

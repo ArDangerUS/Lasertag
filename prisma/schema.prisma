@@ -100,6 +100,7 @@ model Activity {
   bookingItems BookingItem[]
   prices    ActivityPrice[]
   rooms     ActivityRoom[]
+  photoBlob ActivityPhotoBlob?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -133,6 +134,17 @@ model ActivityPrice {
   priceWeekend Int
 
   @@unique([activityId, locationId, durationMin])
+}
+
+// Uploaded activity photo (stored in the DB so it survives ephemeral file
+// systems like Heroku dynos). Kept in a separate table so catalog queries
+// never pull the image bytes.
+model ActivityPhotoBlob {
+  activityId String   @id
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  data       Bytes
+  mime       String
+  updatedAt  DateTime @updatedAt
 }
 
 model Addon {

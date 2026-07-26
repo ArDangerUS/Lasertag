@@ -84,7 +84,12 @@ export async function loadPublicCatalog(locale: Locale): Promise<PublicCatalog> 
     prisma.activity.findMany({
       where: { active: true },
       orderBy: { sortOrder: "asc" },
-      include: { locations: { where: { active: true } }, prices: true },
+      include: {
+        locations: { where: { active: true } },
+        prices: true,
+        // only the timestamp — the bytes are served by /api/photos/[id]
+        photoBlob: { select: { updatedAt: true } },
+      },
     }),
     prisma.addon.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
     prisma.package.findMany({
@@ -113,7 +118,7 @@ export async function loadPublicCatalog(locale: Locale): Promise<PublicCatalog> 
       name: localizedName(a, locale),
       desc: localizedDesc(a, locale),
       icon: a.icon,
-      photo: a.photo,
+      photo: a.photoBlob ? `/api/photos/${a.id}?v=${a.photoBlob.updatedAt.getTime()}` : a.photo,
       perPerson: a.perPerson,
       durationMin: a.durationMin,
       durationOptions: a.durationOptions ? (JSON.parse(a.durationOptions) as number[]) : [],
