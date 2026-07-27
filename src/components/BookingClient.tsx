@@ -28,7 +28,7 @@ type Props = {
 };
 
 const G = "#56EF02";
-const PERK_LIMIT = 5; // perks shown before "показати все"
+const PERK_LIMIT = 6; // perks shown before "показати все"
 
 export default function BookingClient({
   catalog,
@@ -750,11 +750,16 @@ export default function BookingClient({
                           </span>{" "}
                           {dict.uah}
                           {extraCount > 0 && (
-                            <span className="mt-0.5 block text-[12px] font-semibold text-[#b6791b]">
-                              {dict.pkgExtraLine
-                                .replace("{n}", String(extraCount))
-                                .replace("{fee}", fmtMoney(extraFee))}
-                            </span>
+                            <>
+                              <span className="mt-0.5 block text-[12px] font-semibold text-[#b6791b]">
+                                {dict.pkgExtraLine
+                                  .replace("{n}", String(extraCount))
+                                  .replace("{fee}", fmtMoney(extraFee))}
+                              </span>
+                              <span className="mt-0.5 block text-[13px] font-bold text-brand-ink">
+                                {dict.pkgTotalLine.replace("{sum}", fmtMoney(price))}
+                              </span>
+                            </>
                           )}
                         </div>
 
