@@ -26,6 +26,7 @@
    | `KEYCRM_API_TOKEN` | API-ключ із KeyCRM → Налаштування → API |
    | `KEYCRM_PIPELINE_ID` | id воронки для заявок (число) |
    | `KEYCRM_SOURCE_ID` | id джерела (можна не задавати) |
+   | `KEYCRM_CANCEL_STATUS_ID` | id статусу «Скасовано» — туди переїде картка при видаленні броні (KeyCRM не має видалення карток; без цієї змінної картка лише позначається «[СКАСОВАНО]») |
 
 5. Назад у **Deploy** → розділ Manual deploy → оберіть гілку `main` →
    **Deploy Branch**. Дочекайтесь «Your app was successfully deployed».

@@ -96,17 +96,37 @@ export async function pushBookingToKeycrm(bookingId: string): Promise<void> {
   }
 }
 
-// Спроба прибрати картку при видаленні бронювання. Якщо API не підтримує
-// видалення карток — помилка просто залогується, бронювання це не блокує.
+// KeyCRM не має DELETE для карток (за їхньою openapi-специфікацією картку
+// можна лише оновити). Тому при видаленні бронювання ми:
+//   1) додаємо до назви позначку «[СКАСОВАНО]» і примітку;
+//   2) якщо задано KEYCRM_CANCEL_STATUS_ID — переводимо картку в цей статус
+//      (наприклад, у колонку «Скасовано» відповідної воронки).
 export async function deleteKeycrmCard(cardId: string): Promise<void> {
   if (!keycrmEnabled() || !cardId) return;
   try {
-    const res = await keycrmFetch(`/pipelines/cards/${cardId}`, { method: "DELETE" });
+    // Поточна назва картки — щоб додати префікс, а не затерти її.
+    let title = "";
+    const cur = await keycrmFetch(`/pipelines/cards/${cardId}`, { method: "GET" });
+    if (cur.ok) {
+      const data = (await cur.json().catch(() => null)) as { title?: string } | null;
+      title = data?.title || "";
+    }
+
+    const cancelStatusId = Number(process.env.KEYCRM_CANCEL_STATUS_ID) || undefined;
+    const body: Record<string, unknown> = {
+      note: "Бронювання видалено у CRM G-75",
+      ...(title && !title.startsWith("[СКАСОВАНО]") ? { title: `[СКАСОВАНО] ${title}` } : {}),
+      ...(cancelStatusId ? { status_id: cancelStatusId } : {}),
+    };
+    const res = await keycrmFetch(`/pipelines/cards/${cardId}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
-      console.warn(`keycrm: delete card ${cardId} failed (${res.status}) ${errText.slice(0, 200)}`);
+      console.warn(`keycrm: cancel card ${cardId} failed (${res.status}) ${errText.slice(0, 200)}`);
     }
   } catch (e) {
-    console.error("keycrm: delete failed", e);
+    console.error("keycrm: cancel failed", e);
   }
 }

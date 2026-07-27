@@ -270,7 +270,9 @@ async function main() {
   };
 
   let created = 0;
-  for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+  // Два тижні демо-даних від понеділка поточного тижня, щоб календар мав
+  // що показати і на наступному тижні.
+  for (let dayOffset = 0; dayOffset < 14; dayOffset++) {
     const date = new Date(monday);
     date.setDate(monday.getDate() + dayOffset);
     const iso = date.toISOString().slice(0, 10);
