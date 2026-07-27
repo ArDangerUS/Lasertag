@@ -685,7 +685,20 @@ export default function BookingClient({
                     const open = pkgOpenId === p.id;
                     const chosenPkg = pkgBooking?.packageId === p.id;
                     const perksExpanded = !!expandedPerks[p.id];
-                    const shownPerks = perksExpanded ? p.perks : p.perks.slice(0, PERK_LIMIT);
+                    // Пункт про доплату йде одразу після «До N учасників»
+                    // з уже порахованою ставкою для цього комплексу.
+                    const feePerk = dict.pkgPerkExtra.replace("{fee}", fmtMoney(extraFee));
+                    const allPerks: string[] = [];
+                    let feeInserted = false;
+                    for (const perk of p.perks) {
+                      allPerks.push(perk);
+                      if (!feeInserted && /(до|up to)\s*\d+/i.test(perk) && /(учасн|участ|guest)/i.test(perk)) {
+                        allPerks.push(feePerk);
+                        feeInserted = true;
+                      }
+                    }
+                    if (!feeInserted) allPerks.push(feePerk);
+                    const shownPerks = perksExpanded ? allPerks : allPerks.slice(0, PERK_LIMIT);
                     // 30-min starts, trimmed so the grid ends at the last bookable
                     // hour-row (no trailing rows that are entirely unavailable).
                     let lastFit = -1;
@@ -721,27 +734,26 @@ export default function BookingClient({
                             </li>
                           ))}
                         </ul>
-                        {p.perks.length > PERK_LIMIT && (
+                        {allPerks.length > PERK_LIMIT && (
                           <button
                             onClick={() => setExpandedPerks((s) => ({ ...s, [p.id]: !perksExpanded }))}
                             className="mt-2 self-start text-[12px] font-bold text-brand-green"
                           >
                             {perksExpanded
                               ? dict.pkgShowLess
-                              : dict.pkgShowMore.replace("{n}", String(p.perks.length - PERK_LIMIT))}
+                              : dict.pkgShowMore.replace("{n}", String(allPerks.length - PERK_LIMIT))}
                           </button>
                         )}
                         <div className="mt-auto pt-4 text-[13px] text-[#888]">
                           <span className="text-[18px] font-extrabold text-brand-ink">
-                            {fmtMoney(price)}
+                            {fmtMoney(basePrice)}
                           </span>{" "}
                           {dict.uah}
                           {extraCount > 0 && (
                             <span className="mt-0.5 block text-[12px] font-semibold text-[#b6791b]">
                               {dict.pkgExtraLine
                                 .replace("{n}", String(extraCount))
-                                .replace("{max}", String(p.maxPeople))
-                                .replace("{sum}", fmtMoney(extraCount * extraFee))}
+                                .replace("{fee}", fmtMoney(extraFee))}
                             </span>
                           )}
                         </div>
@@ -768,13 +780,6 @@ export default function BookingClient({
 
                         {open && !chosenPkg && (
                           <div className="mt-3 border-t border-[#eee] pt-3">
-                            {extraCount > 0 && (
-                              <div className="mb-2 rounded-xl bg-[#fdf3e3] p-3 text-[12px] leading-relaxed text-[#b6791b]">
-                                {dict.pkgExtraHint
-                                  .replace("{max}", String(p.maxPeople))
-                                  .replace("{fee}", fmtMoney(extraFee))}
-                              </div>
-                            )}
                             {!anyFits ? (
                               <div className="rounded-xl border border-dashed border-[#ddd] p-3 text-center text-[12px] text-[#999]">
                                 {dict.pkgNoTime}
