@@ -19,6 +19,14 @@
    | `NEXT_PUBLIC_VIBER_URL` | `viber://chat?number=%2B380963940288` |
    | `NEXT_PUBLIC_TELEGRAM_URL` | `https://t.me/g75lasertag_bot` |
 
+   Необовʼязково — інтеграція з KeyCRM (нове бронювання → картка у воронці):
+
+   | KEY | VALUE |
+   | --- | --- |
+   | `KEYCRM_API_TOKEN` | API-ключ із KeyCRM → Налаштування → API |
+   | `KEYCRM_PIPELINE_ID` | id воронки для заявок (число) |
+   | `KEYCRM_SOURCE_ID` | id джерела (можна не задавати) |
+
 5. Назад у **Deploy** → розділ Manual deploy → оберіть гілку `main` →
    **Deploy Branch**. Дочекайтесь «Your app was successfully deployed».
    Тут же можна ввімкнути **Enable Automatic Deploys** — тоді кожен push

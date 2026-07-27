@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { audit } from "./audit";
+import { deleteKeycrmCard } from "./keycrm";
 import type { SessionUser } from "./auth";
 import { isStatus } from "./constants";
 import { z } from "zod";
@@ -157,4 +158,6 @@ export async function deleteBooking(id: string, actor: SessionUser) {
     before: { code: b.code, date: b.date, total: b.totalPrice, status: b.status, phone: b.customerPhone },
   });
   await prisma.booking.delete({ where: { id } });
+  // KeyCRM: прибираємо повʼязану картку у фоні (якщо інтеграцію ввімкнено)
+  deleteKeycrmCard(b.keycrmCardId).catch(() => {});
 }

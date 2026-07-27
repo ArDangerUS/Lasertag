@@ -1,6 +1,7 @@
 import { prisma } from "./prisma";
 import { resolvePrice, tieredBlockPrice, makeCode, lasertagMorningDiscount } from "./pricing";
 import { audit } from "./audit";
+import { pushBookingToKeycrm } from "./keycrm";
 import type { SessionUser } from "./auth";
 import { z } from "zod";
 
@@ -246,6 +247,9 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
     summary: `Створено бронь ${booking.code} · ${location.name} · ${input.date} · ${total} грн`,
     after: { code: booking.code, total, items: itemData.length },
   });
+
+  // KeyCRM: заявка падає в воронку у фоні (не блокує відповідь клієнту)
+  pushBookingToKeycrm(booking.id).catch(() => {});
 
   return booking;
 }

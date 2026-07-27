@@ -251,6 +251,8 @@ model Booking {
 
   // Telegram linkage for the confirmation flow
   telegramChatId  String @default("")
+  // ID картки у KeyCRM (якщо інтеграцію ввімкнено), щоб оновлювати/видаляти її
+  keycrmCardId    String @default("")
   telegramUsername String @default("")
 
   items      BookingItem[]
