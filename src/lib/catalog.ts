@@ -506,6 +506,8 @@ export type SeedPackage = {
   perksUk: string;
   icon: string;
   maxPeople: number;
+  // Доплата за учасника понад maxPeople, грн. Немає = 10% від ціни комплексу.
+  extraPersonFee?: number;
   weekday: number;
   weekend: number;
   sortOrder: number;
@@ -520,7 +522,7 @@ const STALKER_PERKS = "60 хвилин – Лазертаг «Сталкер»\n
 export const PACKAGES: SeedPackage[] = [
   // ---------- Нивки ----------
   {
-    locationSlug: "nyvky", key: "nyvky-stalker", icon: "🎯", maxPeople: 6,
+    locationSlug: "nyvky", key: "nyvky-stalker", icon: "🎯", maxPeople: 6, extraPersonFee: 1500,
     nameUk: "Комплекс «Сталкер»", nameRu: "Комплекс «Сталкер»", nameEn: "“Stalker” package",
     perksUk: STALKER_PERKS, weekday: 8700, weekend: 9000, sortOrder: 1,
     items: [{ key: "scenario", durationMin: 60, order: O.scenario }],
@@ -593,7 +595,7 @@ export const PACKAGES: SeedPackage[] = [
 
   // ---------- ТРЦ New Way ----------
   {
-    locationSlug: "new-way", key: "newway-stalker", icon: "🎯", maxPeople: 6,
+    locationSlug: "new-way", key: "newway-stalker", icon: "🎯", maxPeople: 6, extraPersonFee: 1500,
     nameUk: "Комплекс «Сталкер»", nameRu: "Комплекс «Сталкер»", nameEn: "“Stalker” package",
     perksUk: STALKER_PERKS, weekday: 8700, weekend: 9000, sortOrder: 1,
     items: [{ key: "scenario", durationMin: 60, order: O.scenario }],
@@ -624,7 +626,7 @@ export const PACKAGES: SeedPackage[] = [
 
   // ---------- ТРЦ DREAM Yellow ----------
   {
-    locationSlug: "dream-yellow", key: "dream-stalker", icon: "🎯", maxPeople: 6,
+    locationSlug: "dream-yellow", key: "dream-stalker", icon: "🎯", maxPeople: 6, extraPersonFee: 1500,
     nameUk: "Комплекс «Сталкер»", nameRu: "Комплекс «Сталкер»", nameEn: "“Stalker” package",
     perksUk: STALKER_PERKS, weekday: 8700, weekend: 9000, sortOrder: 1,
     items: [{ key: "scenario", durationMin: 60, order: O.scenario }],

@@ -68,6 +68,7 @@ export type PubPackage = {
   perks: string[];
   icon: string;
   maxPeople: number;
+  extraPersonFee: number; // грн/особу понад maxPeople; 0 = 10% від ціни комплексу
   fixedWeekday: number;
   fixedWeekend: number;
   items: PubPackageItem[];
@@ -161,6 +162,7 @@ export async function loadPublicCatalog(locale: Locale): Promise<PublicCatalog> 
         .filter(Boolean),
       icon: p.icon,
       maxPeople: p.maxPeople,
+      extraPersonFee: p.extraPersonFee,
       fixedWeekday: p.fixedPriceWeekday,
       fixedWeekend: p.fixedPriceWeekend,
       items: p.items.map((i) => ({

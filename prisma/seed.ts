@@ -163,6 +163,7 @@ async function main() {
         perksEn: perksToEn(p.perksUk),
         icon: p.icon,
         maxPeople: p.maxPeople,
+        extraPersonFee: p.extraPersonFee ?? 0,
         fixedPriceWeekday: p.weekday,
         fixedPriceWeekend: p.weekend,
         sortOrder: p.sortOrder,

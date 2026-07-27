@@ -445,7 +445,12 @@ export default function BookingClient({
       const p = catalog.packages.find((x) => x.id === pkgBooking.packageId);
       if (p) {
         const expanded = expandPackage(p, pkgBooking.startMin);
-        const price = weekend ? p.fixedWeekend : p.fixedWeekday;
+        // Доплата за учасників понад включену кількість: фіксована ставка
+        // («Сталкер» 1500 грн) або 10% від ціни комплексу за кожного.
+        const base = weekend ? p.fixedWeekend : p.fixedWeekday;
+        const extraCount = Math.max(0, people - p.maxPeople);
+        const extraFee = p.extraPersonFee > 0 ? p.extraPersonFee : Math.round(base * 0.1);
+        const price = base + extraCount * extraFee;
         const endMin = Math.max(...expanded.map((i) => i.startMin + i.durationMin));
         pkg = {
           packageId: p.id,
@@ -507,7 +512,10 @@ export default function BookingClient({
             activityId: it.activityId,
             startMin: it.startMin,
             durationMin: it.durationMin,
-            people: Math.min(people, 200),
+            // кількість по кожній складовій обрізається до її фізичного
+            // ліміту (наприклад, квест-кімната до 10) — доплата за
+            // додаткових учасників уже врахована в ціні комплексу
+            people: Math.min(people, actById.get(it.activityId)?.maxPeople ?? people),
             price: idx === 0 ? cart.pkg!.price : 0,
           }))
         : [];
@@ -670,16 +678,18 @@ export default function BookingClient({
                 <p className="mb-4 mt-1 text-[13px] text-[#999]">{dict.packagesHint}</p>
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                   {locPackages.map((p) => {
-                    const price = weekend ? p.fixedWeekend : p.fixedWeekday;
+                    const basePrice = weekend ? p.fixedWeekend : p.fixedWeekday;
+                    const extraCount = Math.max(0, people - p.maxPeople);
+                    const extraFee = p.extraPersonFee > 0 ? p.extraPersonFee : Math.round(basePrice * 0.1);
+                    const price = basePrice + extraCount * extraFee;
                     const open = pkgOpenId === p.id;
                     const chosenPkg = pkgBooking?.packageId === p.id;
-                    const overCap = people > p.maxPeople;
                     const perksExpanded = !!expandedPerks[p.id];
                     const shownPerks = perksExpanded ? p.perks : p.perks.slice(0, PERK_LIMIT);
                     // 30-min starts, trimmed so the grid ends at the last bookable
                     // hour-row (no trailing rows that are entirely unavailable).
                     let lastFit = -1;
-                    if (open && !overCap) {
+                    if (open) {
                       for (let m = location.openMin; m < location.closeMin; m += SLOT_STEP_MIN) {
                         if (packageFits(p, m)) lastFit = m;
                       }
@@ -726,6 +736,14 @@ export default function BookingClient({
                             {fmtMoney(price)}
                           </span>{" "}
                           {dict.uah}
+                          {extraCount > 0 && (
+                            <span className="mt-0.5 block text-[12px] font-semibold text-[#b6791b]">
+                              {dict.pkgExtraLine
+                                .replace("{n}", String(extraCount))
+                                .replace("{max}", String(p.maxPeople))
+                                .replace("{sum}", fmtMoney(extraCount * extraFee))}
+                            </span>
+                          )}
                         </div>
 
                         {chosenPkg ? (
@@ -750,11 +768,14 @@ export default function BookingClient({
 
                         {open && !chosenPkg && (
                           <div className="mt-3 border-t border-[#eee] pt-3">
-                            {overCap ? (
-                              <div className="rounded-xl bg-[#fdf3e3] p-3 text-[12px] leading-relaxed text-[#b6791b]">
-                                {dict.pkgMaxPeople.replace("{max}", String(p.maxPeople))}
+                            {extraCount > 0 && (
+                              <div className="mb-2 rounded-xl bg-[#fdf3e3] p-3 text-[12px] leading-relaxed text-[#b6791b]">
+                                {dict.pkgExtraHint
+                                  .replace("{max}", String(p.maxPeople))
+                                  .replace("{fee}", fmtMoney(extraFee))}
                               </div>
-                            ) : !anyFits ? (
+                            )}
+                            {!anyFits ? (
                               <div className="rounded-xl border border-dashed border-[#ddd] p-3 text-center text-[12px] text-[#999]">
                                 {dict.pkgNoTime}
                               </div>
@@ -1361,11 +1382,21 @@ const LOGO_SOURCES = [
 function BrandLogo() {
   const [srcIdx, setSrcIdx] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   const advance = () => {
     setLoaded(false);
     setSrcIdx((i) => i + 1);
   };
+
+  // SSR: якщо лого завантажилось до гідратації, onLoad/onError не спрацюють —
+  // перевіряємо стан картинки одразу після монтування.
+  useEffect(() => {
+    const el = imgRef.current;
+    if (!el || !el.complete) return;
+    if (el.naturalWidth > 0) setLoaded(true);
+    else advance();
+  }, [srcIdx]);
 
   // A hanging request (blocked host) never fires onError — time it out.
   useEffect(() => {
@@ -1374,25 +1405,31 @@ function BrandLogo() {
     return () => clearTimeout(t);
   }, [srcIdx, loaded]);
 
-  if (srcIdx >= LOGO_SOURCES.length) return <G75Logo />;
   return (
     <span className="relative inline-block h-10 w-10 sm:h-[52px] sm:w-[52px]">
-      {!loaded && (
-        <span className="absolute inset-0">
-          <G75Logo />
-        </span>
+      {srcIdx >= LOGO_SOURCES.length ? (
+        <G75Logo />
+      ) : (
+        <>
+          {!loaded && (
+            <span className="absolute inset-0">
+              <G75Logo />
+            </span>
+          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            ref={imgRef}
+            src={LOGO_SOURCES[srcIdx]}
+            alt="Лазертаг G-75"
+            width={52}
+            height={52}
+            className="relative h-full w-full object-contain"
+            style={{ opacity: loaded ? 1 : 0 }}
+            onLoad={() => setLoaded(true)}
+            onError={advance}
+          />
+        </>
       )}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={LOGO_SOURCES[srcIdx]}
-        alt="Лазертаг G-75"
-        width={52}
-        height={52}
-        className="relative h-full w-full object-contain"
-        style={{ opacity: loaded ? 1 : 0 }}
-        onLoad={() => setLoaded(true)}
-        onError={advance}
-      />
     </span>
   );
 }

@@ -199,6 +199,9 @@ model Package {
   icon      String  @default("🎁")
   photo     String  @default("")
   maxPeople Int     @default(10)
+  // Доплата за кожного учасника ПОНАД maxPeople, грн («Сталкер» = 1500).
+  // 0 = стандартне правило: 10% від ціни комплексу за кожного додаткового.
+  extraPersonFee Int @default(0)
   // Flat package price (weekday / weekend). If 0, price = sum of its items.
   fixedPriceWeekday Int @default(0)
   fixedPriceWeekend Int @default(0)
