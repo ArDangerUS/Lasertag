@@ -154,7 +154,7 @@ async function main() {
       data: {
         id: `pkg-${p.key}`,
         key: p.key,
-        locations: { create: [{ locationId: locBySlug[p.locationSlug] }] },
+        locations: { create: p.locationSlugs.map((slug) => ({ locationId: locBySlug[slug] })) },
         nameUk: p.nameUk,
         nameRu: p.nameRu,
         nameEn: p.nameEn,
