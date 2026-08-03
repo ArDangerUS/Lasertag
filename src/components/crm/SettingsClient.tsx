@@ -44,18 +44,50 @@ type AddonRow = {
   filePhoto: string; // готовий файл public/addons/<key>.* ("" = немає)
 };
 
+type PkgItem = { activityId: string; durationMin: number; parallel: boolean };
+
+type PkgRow = {
+  id: string;
+  nameUk: string;
+  nameRu: string;
+  nameEn: string;
+  icon: string;
+  active: boolean;
+  locationId: string;
+  maxPeople: number;
+  extraPersonFee: number; // 0 = 10% від ціни комплексу
+  fixedPriceWeekday: number;
+  fixedPriceWeekend: number;
+  perksUk: string;
+  perksRu: string;
+  perksEn: string;
+  items: PkgItem[];
+};
+
+type ActivityOption = {
+  id: string;
+  name: string;
+  icon: string;
+  locationIds: string[];
+  durationMin: number;
+};
+
 const UNLIMITED = 999; // maxPeople 999 = без обмежень
 
 export default function SettingsClient({
   activities,
   locations,
   addons,
+  packages,
+  activityOptions,
 }: {
   activities: Act[];
   locations: Loc[];
   addons: AddonRow[];
+  packages: PkgRow[];
+  activityOptions: ActivityOption[];
 }) {
-  const [tab, setTab] = useState<"acts" | "addons">("acts");
+  const [tab, setTab] = useState<"acts" | "addons" | "packages">("acts");
   const [showCreate, setShowCreate] = useState(false);
 
   const tabCls = (on: boolean) =>
@@ -74,6 +106,9 @@ export default function SettingsClient({
           <button onClick={() => { setTab("addons"); setShowCreate(false); }} className={tabCls(tab === "addons")}>
             🎁 Додаткові послуги
           </button>
+          <button onClick={() => { setTab("packages"); setShowCreate(false); }} className={tabCls(tab === "packages")}>
+            🎉 Комплекси
+          </button>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex-1">
@@ -85,12 +120,21 @@ export default function SettingsClient({
                   (скільки груп паралельно), розмір груп. «∞» = без обмежень. Кожна зміна — у журналі.
                 </p>
               </>
-            ) : (
+            ) : tab === "addons" ? (
               <>
                 <h2 className="text-[18px] font-extrabold">Додаткові послуги</h2>
                 <p className="text-[13px] text-[#888]">
                   Блок «Додайте до свята» на сайті: ціни, назви 3 мовами і фото. Плитки з фото сайт
                   показує першим рядом, без фото — далі. Ціна 0 = «ціна уточнюється».
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 className="text-[18px] font-extrabold">Комплекси</h2>
+                <p className="text-[13px] text-[#888]">
+                  «Комплексні пропозиції» на сайті: локація, ціни (будні/вихідні), склад і порядок
+                  розваг, включена кількість учасників та доплата за кожного наступного (0 = 10% від
+                  ціни). Перелік пунктів — по одному в рядку.
                 </p>
               </>
             )}
@@ -99,18 +143,31 @@ export default function SettingsClient({
             onClick={() => setShowCreate((s) => !s)}
             className="rounded-full bg-[#56EF02] px-4 py-2.5 text-[13px] font-bold text-[#1A1A1A]"
           >
-            {showCreate ? "Скасувати" : tab === "acts" ? "+ Нова розвага" : "+ Нова послуга"}
+            {showCreate
+              ? "Скасувати"
+              : tab === "acts"
+                ? "+ Нова розвага"
+                : tab === "addons"
+                  ? "+ Нова послуга"
+                  : "+ Новий комплекс"}
           </button>
         </div>
         {showCreate && tab === "acts" && (
           <CreateActivityForm locations={locations} onDone={() => setShowCreate(false)} />
         )}
         {showCreate && tab === "addons" && <CreateAddonForm onDone={() => setShowCreate(false)} />}
+        {showCreate && tab === "packages" && (
+          <CreatePackageForm locations={locations} onDone={() => setShowCreate(false)} />
+        )}
       </div>
 
       {tab === "acts" &&
         activities.map((a) => <ActivityCard key={a.id} act={a} locations={locations} />)}
       {tab === "addons" && addons.map((a) => <AddonCard key={a.id} addon={a} />)}
+      {tab === "packages" &&
+        packages.map((p) => (
+          <PackageCard key={p.id} pkg={p} locations={locations} activityOptions={activityOptions} />
+        ))}
     </div>
   );
 }
@@ -1057,6 +1114,372 @@ function AddonCard({ addon }: { addon: AddonRow }) {
           className="rounded-full bg-[#56EF02] px-5 py-2.5 text-[13px] font-bold text-[#1A1A1A] disabled:opacity-60"
         >
           Зберегти
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- packages (комплекси) ---------------- */
+
+function CreatePackageForm({ locations, onDone }: { locations: Loc[]; onDone: () => void }) {
+  const router = useRouter();
+  const [nameUk, setNameUk] = useState("");
+  const [nameRu, setNameRu] = useState("");
+  const [nameEn, setNameEn] = useState("");
+  const [locationId, setLocationId] = useState(locations[0]?.id ?? "");
+  const [wd, setWd] = useState("");
+  const [we, setWe] = useState("");
+  const [maxPeople, setMaxPeople] = useState("10");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const inputCls = "w-full rounded-lg border border-[#333] bg-[#0e0e0e] px-3 py-2 text-[14px] text-white";
+
+  async function create() {
+    setError("");
+    if (!nameUk.trim()) return setError("Вкажіть назву (укр)");
+    const w1 = parseInt(wd, 10);
+    const w2 = parseInt(we, 10);
+    if (!Number.isFinite(w1) || !Number.isFinite(w2)) return setError("Вкажіть ціни (будні та вихідні)");
+    setBusy(true);
+    try {
+      const res = await fetch("/api/crm/packages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nameUk,
+          nameRu,
+          nameEn,
+          locationId,
+          maxPeople: Math.max(1, parseInt(maxPeople, 10) || 10),
+          fixedPriceWeekday: w1,
+          fixedPriceWeekend: w2,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Помилка");
+      onDone();
+      router.refresh();
+    } catch (e: any) {
+      setError(e?.message || "Помилка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-[#2a2a2a] bg-[#0e0e0e] p-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <input placeholder="Назва (укр) *" value={nameUk} onChange={(e) => setNameUk(e.target.value)} className={inputCls} />
+        <input placeholder="Назва (рос)" value={nameRu} onChange={(e) => setNameRu(e.target.value)} className={inputCls} />
+        <input placeholder="Назва (англ)" value={nameEn} onChange={(e) => setNameEn(e.target.value)} className={inputCls} />
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <select value={locationId} onChange={(e) => setLocationId(e.target.value)} className={inputCls}>
+          {locations.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.name}
+            </option>
+          ))}
+        </select>
+        <input placeholder="Ціна будні, грн *" value={wd} onChange={(e) => setWd(e.target.value)} inputMode="numeric" className={inputCls} />
+        <input placeholder="Ціна вихідні, грн *" value={we} onChange={(e) => setWe(e.target.value)} inputMode="numeric" className={inputCls} />
+        <input placeholder="Включено учасників" value={maxPeople} onChange={(e) => setMaxPeople(e.target.value)} inputMode="numeric" className={inputCls} />
+      </div>
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          onClick={create}
+          disabled={busy}
+          className="rounded-full bg-[#56EF02] px-5 py-2.5 text-[13px] font-bold text-[#1A1A1A] disabled:opacity-60"
+        >
+          Створити комплекс
+        </button>
+        <span className="text-[12px] text-[#888]">Склад розваг і перелік пунктів додаються в картці після створення.</span>
+        {error && <span className="text-[12px] text-[#ff6b6b]">{error}</span>}
+      </div>
+    </div>
+  );
+}
+
+function PackageCard({
+  pkg,
+  locations,
+  activityOptions,
+}: {
+  pkg: PkgRow;
+  locations: Loc[];
+  activityOptions: ActivityOption[];
+}) {
+  const router = useRouter();
+  const [active, setActive] = useState(pkg.active);
+  const [names, setNames] = useState({ uk: pkg.nameUk, ru: pkg.nameRu, en: pkg.nameEn });
+  const [locationId, setLocationId] = useState(pkg.locationId);
+  const [wdStr, setWdStr] = useState(String(pkg.fixedPriceWeekday));
+  const [weStr, setWeStr] = useState(String(pkg.fixedPriceWeekend));
+  const [maxStr, setMaxStr] = useState(String(pkg.maxPeople));
+  const [feeStr, setFeeStr] = useState(String(pkg.extraPersonFee));
+  const [perks, setPerks] = useState({ uk: pkg.perksUk, ru: pkg.perksRu, en: pkg.perksEn });
+  const [items, setItems] = useState<PkgItem[]>(pkg.items);
+  const [savedFlash, setSavedFlash] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const inputCls = "w-full rounded-lg border border-[#333] bg-[#0e0e0e] px-3 py-2 text-[14px] text-white";
+
+  function flash(msg: string) {
+    setSavedFlash(msg);
+    setTimeout(() => setSavedFlash(""), 1800);
+  }
+
+  const locActs = activityOptions.filter((a) => a.locationIds.includes(locationId));
+  const actById = (id: string) => activityOptions.find((a) => a.id === id);
+  // розваги, яких немає на обраній локації — підсвічуємо попередженням
+  const staleItems = items.filter((it) => !actById(it.activityId)?.locationIds.includes(locationId));
+
+  function move(i: number, dir: number) {
+    setItems((arr) => {
+      const j = i + dir;
+      if (j < 0 || j >= arr.length) return arr;
+      const next = [...arr];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
+
+  async function save() {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/crm/packages/${pkg.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          active,
+          nameUk: names.uk,
+          nameRu: names.ru,
+          nameEn: names.en,
+          locationId,
+          maxPeople: Math.max(1, parseInt(maxStr, 10) || pkg.maxPeople),
+          extraPersonFee: Math.max(0, parseInt(feeStr, 10) || 0),
+          fixedPriceWeekday: Math.max(0, parseInt(wdStr, 10) || 0),
+          fixedPriceWeekend: Math.max(0, parseInt(weStr, 10) || 0),
+          perksUk: perks.uk,
+          perksRu: perks.ru,
+          perksEn: perks.en,
+          items: items.map((it) => ({
+            activityId: it.activityId,
+            durationMin: it.durationMin,
+            parallel: it.parallel,
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Помилка");
+      flash("Збережено ✓");
+      router.refresh();
+    } catch (e: any) {
+      alert(e?.message || "Помилка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removePkg() {
+    if (!confirm(`Видалити комплекс «${pkg.nameUk}»? Цю дію не можна буде скасувати.`)) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/crm/packages/${pkg.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Помилка");
+      router.refresh();
+    } catch (e: any) {
+      alert(e?.message || "Помилка");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-card bg-[#161616] p-6">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <span className="text-2xl">{pkg.icon}</span>
+        <span className="text-[16px] font-extrabold">{names.uk}</span>
+        <span className="rounded-full bg-[#0e0e0e] px-2.5 py-1 text-[11px] text-[#888]">
+          {locations.find((l) => l.id === locationId)?.name ?? "—"}
+        </span>
+        <label className="ml-auto flex cursor-pointer items-center gap-2 text-[13px]">
+          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+          <span className={active ? "text-[#3cba54]" : "text-[#888]"}>
+            {active ? "Доступний" : "Прихований"}
+          </span>
+        </label>
+        {savedFlash && <span className="text-[12px] text-[#56EF02]">{savedFlash}</span>}
+      </div>
+
+      {/* names */}
+      <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+        {(["uk", "ru", "en"] as const).map((lng) => (
+          <div key={lng}>
+            <div className="mb-1 text-[11px] font-bold uppercase text-[#777]">Назва {lng}</div>
+            <input
+              value={names[lng]}
+              onChange={(e) => setNames((n) => ({ ...n, [lng]: e.target.value }))}
+              className={inputCls}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* location + prices + people */}
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div>
+          <div className="mb-1 text-[11px] font-bold uppercase text-[#777]">Локація</div>
+          <select value={locationId} onChange={(e) => setLocationId(e.target.value)} className={inputCls}>
+            {locations.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <div className="mb-1 text-[11px] font-bold uppercase text-[#777]">Будні, грн</div>
+          <input value={wdStr} onChange={(e) => setWdStr(e.target.value)} inputMode="numeric" className={`${inputCls} text-right`} />
+        </div>
+        <div>
+          <div className="mb-1 text-[11px] font-bold uppercase text-[#777]">Вихідні, грн</div>
+          <input value={weStr} onChange={(e) => setWeStr(e.target.value)} inputMode="numeric" className={`${inputCls} text-right`} />
+        </div>
+        <div>
+          <div className="mb-1 text-[11px] font-bold uppercase text-[#777]">Включено учасників</div>
+          <input value={maxStr} onChange={(e) => setMaxStr(e.target.value)} inputMode="numeric" className={`${inputCls} text-right`} />
+        </div>
+        <div>
+          <div className="mb-1 text-[11px] font-bold uppercase text-[#777]">Доплата/дод. учасник</div>
+          <input
+            value={feeStr}
+            onChange={(e) => setFeeStr(e.target.value)}
+            inputMode="numeric"
+            className={`${inputCls} text-right`}
+            title="0 = 10% від ціни комплексу"
+          />
+          <div className="mt-0.5 text-[10px] text-[#666]">0 = 10% від ціни</div>
+        </div>
+      </div>
+
+      {/* items */}
+      <div className="mb-4">
+        <div className="mb-1.5 text-[11px] font-bold uppercase text-[#777]">
+          Склад (порядок = послідовність свята; «паралельно» = на весь час, як банкетна)
+        </div>
+        <div className="mb-2 flex flex-wrap gap-2">
+          {locActs.map((a) => (
+            <button
+              key={a.id}
+              onClick={() =>
+                setItems((arr) => [...arr, { activityId: a.id, durationMin: a.durationMin || 60, parallel: false }])
+              }
+              className="rounded-full border border-[#333] bg-[#0e0e0e] px-3 py-1.5 text-[12px] font-semibold text-[#bbb] transition hover:border-[#56EF02] hover:text-white"
+            >
+              {a.icon} {a.name} +
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-col gap-2">
+          {items.map((it, i) => {
+            const a = actById(it.activityId);
+            const missing = !a?.locationIds.includes(locationId);
+            return (
+              <div key={`${it.activityId}-${i}`} className="flex flex-wrap items-center gap-2 rounded-xl bg-[#0e0e0e] px-3 py-2">
+                <span className="w-6 text-center text-[12px] font-bold text-[#666]">{i + 1}.</span>
+                <span className={`flex-1 text-[13px] font-semibold ${missing ? "text-[#ff8a5c]" : ""}`}>
+                  {a ? `${a.icon} ${a.name}` : "?"}
+                  {missing && " — немає на цій локації"}
+                </span>
+                <label className="flex items-center gap-1 text-[12px] text-[#999]">
+                  <input
+                    type="number"
+                    value={it.durationMin}
+                    min={15}
+                    step={15}
+                    onChange={(e) =>
+                      setItems((arr) =>
+                        arr.map((x, idx) => (idx === i ? { ...x, durationMin: Math.max(15, Number(e.target.value) || 60) } : x))
+                      )
+                    }
+                    className="w-16 rounded-lg border border-[#333] bg-[#161616] px-2 py-1 text-right text-[12px] text-white"
+                  />
+                  хв
+                </label>
+                <label className="flex cursor-pointer items-center gap-1.5 text-[12px] text-[#999]">
+                  <input
+                    type="checkbox"
+                    checked={it.parallel}
+                    onChange={(e) =>
+                      setItems((arr) => arr.map((x, idx) => (idx === i ? { ...x, parallel: e.target.checked } : x)))
+                    }
+                  />
+                  паралельно
+                </label>
+                <button onClick={() => move(i, -1)} disabled={i === 0} className="h-7 w-7 rounded-full bg-[#1f1f1f] text-[#bbb] disabled:opacity-30">
+                  ↑
+                </button>
+                <button onClick={() => move(i, 1)} disabled={i === items.length - 1} className="h-7 w-7 rounded-full bg-[#1f1f1f] text-[#bbb] disabled:opacity-30">
+                  ↓
+                </button>
+                <button
+                  onClick={() => setItems((arr) => arr.filter((_, idx) => idx !== i))}
+                  className="h-7 w-7 rounded-full bg-[#2a2a2a] text-[#bbb]"
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })}
+          {items.length === 0 && (
+            <div className="rounded-xl border border-dashed border-[#333] px-3 py-3 text-center text-[12px] text-[#777]">
+              Додайте розваги кнопками вище — у порядку проведення свята
+            </div>
+          )}
+          {staleItems.length > 0 && (
+            <div className="text-[11px] text-[#ff8a5c]">
+              Помаранчеві позиції не існують на обраній локації — приберіть їх або поверніть локацію.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* perks */}
+      <div className="mb-4">
+        <div className="mb-1.5 text-[11px] font-bold uppercase text-[#777]">
+          Перелік пунктів на картці (по одному в рядку)
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          {(["uk", "ru", "en"] as const).map((lng) => (
+            <textarea
+              key={lng}
+              value={perks[lng]}
+              onChange={(e) => setPerks((p) => ({ ...p, [lng]: e.target.value }))}
+              rows={5}
+              placeholder={lng === "uk" ? "60 хвилин – Лазертаг\nВедучий програми\n…" : lng.toUpperCase()}
+              className="w-full rounded-xl border border-[#333] bg-[#0e0e0e] px-3 py-2 text-[13px] leading-relaxed text-white"
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <button
+          onClick={removePkg}
+          disabled={busy}
+          className="rounded-full border border-[#5b2222] px-4 py-2 text-[13px] font-bold text-[#ff6b6b] transition hover:bg-[#2a1212] disabled:opacity-60"
+        >
+          Видалити
+        </button>
+        <button
+          onClick={save}
+          disabled={busy}
+          className="rounded-full bg-[#56EF02] px-5 py-2.5 text-[13px] font-bold text-[#1A1A1A] disabled:opacity-60"
+        >
+          Зберегти комплекс
         </button>
       </div>
     </div>
