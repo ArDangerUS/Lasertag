@@ -24,6 +24,8 @@ export default function BookingCreate({
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [comment, setComment] = useState("");
+  // Коментар менеджера: після створення броні падає у стрічку коментарів
+  const [managerComment, setManagerComment] = useState("");
   const [status, setStatus] = useState("CONFIRMED");
   const [lines, setLines] = useState<Line[]>([]);
   const [addonIds, setAddonIds] = useState<Record<string, number>>({});
@@ -103,6 +105,15 @@ export default function BookingCreate({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Помилка");
+      // Коментар менеджера — одразу в стрічку коментарів нової броні.
+      // Помилка тут не критична: бронь уже створена.
+      if (managerComment.trim() && data.id) {
+        await fetch(`/api/crm/bookings/${data.id}/comments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: managerComment.trim() }),
+        }).catch(() => {});
+      }
       onSaved();
     } catch (e: any) {
       setError(e?.message || "Помилка");
@@ -130,7 +141,9 @@ export default function BookingCreate({
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full rounded-xl border border-[#333] bg-[#0e0e0e] px-3 py-2.5 text-[14px] text-white"
+              // клік у будь-якому місці поля відкриває календар (не лише іконка)
+              onClick={(e) => (e.currentTarget as HTMLInputElement).showPicker?.()}
+              className="w-full cursor-pointer rounded-xl border border-[#333] bg-[#0e0e0e] px-3 py-2.5 text-[14px] text-white"
             />
           </div>
           <div>
@@ -331,6 +344,18 @@ export default function BookingCreate({
             </div>
           </div>
         )}
+
+        {/* comment thread starter */}
+        <div>
+          <Label>Коментар менеджера (необовʼязково)</Label>
+          <textarea
+            value={managerComment}
+            onChange={(e) => setManagerComment(e.target.value)}
+            rows={3}
+            placeholder="Побажання клієнта, деталі свята — довжина не обмежена…"
+            className="w-full rounded-xl border border-[#333] bg-[#0e0e0e] px-3 py-2 text-[14px] text-white"
+          />
+        </div>
 
         {error && <div className="text-center text-[13px] text-[#ff8a5c]">{error}</div>}
 
