@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CrmCatalog, CrmBooking } from "@/lib/crm-data";
 import { STATUS_META, BOOKING_STATUSES, type BookingStatus } from "@/lib/constants";
 import { fmtMoney, minToHHMM } from "@/lib/pricing";
@@ -48,6 +48,36 @@ export default function CalendarClient({
   const [editing, setEditing] = useState<CrmBooking | null>(null);
   const [creating, setCreating] = useState<null | { date: string; locationId?: string; startMin?: number }>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Незбережені перенесення часу (drag-and-drop у денному виді, лише адмін):
+  // itemId -> новий startMin. Застосовуються кнопкою «Зберегти зміни часу».
+  const [timeMoves, setTimeMoves] = useState<Record<string, number>>({});
+  const [savingMoves, setSavingMoves] = useState(false);
+
+  useEffect(() => {
+    // зміна дня/виду скидає незбережені перенесення
+    setTimeMoves({});
+  }, [anchor, view]);
+
+  async function saveMoves() {
+    const moves = Object.entries(timeMoves).map(([itemId, startMin]) => ({ itemId, startMin }));
+    if (!moves.length) return;
+    setSavingMoves(true);
+    try {
+      const res = await fetch("/api/crm/bookings/reschedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ moves }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Помилка");
+      setTimeMoves({});
+      refetch();
+    } catch (e: any) {
+      alert(e?.message || "Помилка збереження");
+    } finally {
+      setSavingMoves(false);
+    }
+  }
 
   const monday = useMemo(() => mondayOf(anchor), [anchor]);
   const range = useMemo(() => {
@@ -209,9 +239,34 @@ export default function CalendarClient({
           bookings={filtered}
           locationFilter={locationFilter}
           canWrite={canWrite}
+          isAdmin={isAdmin}
+          timeMoves={timeMoves}
+          onMove={(itemId, startMin) => setTimeMoves((m) => ({ ...m, [itemId]: startMin }))}
           onOpen={setEditing}
           onCreate={(locationId, startMin) => setCreating({ date: anchor, locationId, startMin })}
         />
+      )}
+
+      {/* панель незбережених перенесень (drag-and-drop) */}
+      {Object.keys(timeMoves).length > 0 && (
+        <div className="fixed bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-full bg-[#111] px-5 py-3 shadow-[0_10px_40px_rgba(0,0,0,0.5)] ring-1 ring-[#333]">
+          <span className="text-[13px] text-[#ddd]">
+            Перенесено позицій: <b>{Object.keys(timeMoves).length}</b>
+          </span>
+          <button
+            onClick={saveMoves}
+            disabled={savingMoves}
+            className="rounded-full bg-[#56EF02] px-4 py-2 text-[13px] font-bold text-[#1A1A1A] disabled:opacity-60"
+          >
+            {savingMoves ? "Перевірка…" : "Зберегти зміни часу"}
+          </button>
+          <button
+            onClick={() => setTimeMoves({})}
+            className="rounded-full border border-[#333] px-3.5 py-2 text-[13px] text-[#bbb]"
+          >
+            Скасувати
+          </button>
+        </div>
       )}
 
       {editing && (
@@ -352,6 +407,9 @@ function DayView({
   bookings,
   locationFilter,
   canWrite,
+  isAdmin = false,
+  timeMoves = {},
+  onMove,
   onOpen,
   onCreate,
 }: {
@@ -360,6 +418,9 @@ function DayView({
   bookings: CrmBooking[];
   locationFilter: string;
   canWrite: boolean;
+  isAdmin?: boolean;
+  timeMoves?: Record<string, number>;
+  onMove?: (itemId: string, startMin: number) => void;
   onOpen: (b: CrmBooking) => void;
   onCreate: (locationId: string, startMin: number) => void;
 }) {
@@ -414,6 +475,9 @@ function DayView({
           catalog={catalog}
           bookings={bookings.filter((b) => b.locationId === locations[0].id)}
           canWrite={canWrite}
+          isAdmin={isAdmin}
+          timeMoves={timeMoves}
+          onMove={onMove}
           onOpen={onOpen}
           onCreate={onCreate}
         />
@@ -480,6 +544,9 @@ function ActivityDayGrid({
   catalog,
   bookings,
   canWrite,
+  isAdmin = false,
+  timeMoves = {},
+  onMove,
   onOpen,
   onCreate,
 }: {
@@ -487,6 +554,9 @@ function ActivityDayGrid({
   catalog: CrmCatalog;
   bookings: CrmBooking[];
   canWrite: boolean;
+  isAdmin?: boolean;
+  timeMoves?: Record<string, number>;
+  onMove?: (itemId: string, startMin: number) => void;
   onOpen: (b: CrmBooking) => void;
   onCreate: (locationId: string, startMin: number) => void;
 }) {
@@ -495,12 +565,25 @@ function ActivityDayGrid({
     [catalog.activities, location.id]
   );
 
+  // Що зараз тягнуть (dataTransfer не читається під час dragover, тому ref)
+  const dragRef = useRef<{ itemId: string; activityId: string } | null>(null);
+
   // Every booking item paired with its booking (a booking may span activities).
+  // Незбережені перенесення застосовуються одразу для показу.
   const entries = useMemo(() => {
-    const list: { b: CrmBooking; it: CrmBooking["items"][number] }[] = [];
-    bookings.forEach((b) => b.items.forEach((it) => list.push({ b, it })));
+    const list: { b: CrmBooking; it: CrmBooking["items"][number]; moved: boolean }[] = [];
+    bookings.forEach((b) =>
+      b.items.forEach((it) => {
+        const newStart = timeMoves[it.id];
+        list.push(
+          newStart != null
+            ? { b, it: { ...it, startMin: newStart }, moved: true }
+            : { b, it, moved: false }
+        );
+      })
+    );
     return list;
-  }, [bookings]);
+  }, [bookings, timeMoves]);
 
   return (
     <div className="overflow-x-auto rounded-card bg-white thin-scroll">
@@ -568,10 +651,40 @@ function ActivityDayGrid({
               const maxBusy = Math.max(busyAt(h * 60), busyAt(h * 60 + 30));
               const free = Math.max(0, cap - maxBusy);
               return (
-                <div key={a.id} className="min-w-0 overflow-hidden border-l border-[#f4f4f4] p-1.5">
+                <div
+                  key={a.id}
+                  className="min-w-0 overflow-hidden border-l border-[#f4f4f4] p-1.5"
+                  // drop-зона: приймає лише позиції ЦІЄЇ розваги; верхня половина
+                  // клітинки = :00, нижня = :30
+                  onDragOver={(e) => {
+                    if (isAdmin && dragRef.current?.activityId === a.id) e.preventDefault();
+                  }}
+                  onDrop={(e) => {
+                    const drag = dragRef.current;
+                    if (!isAdmin || !drag || drag.activityId !== a.id || !onMove) return;
+                    e.preventDefault();
+                    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                    const half = e.clientY - rect.top > rect.height / 2 ? 30 : 0;
+                    onMove(drag.itemId, h * 60 + half);
+                    dragRef.current = null;
+                  }}
+                >
                   <div className="flex h-full flex-col gap-1.5">
-                    {[...startingHere, ...cancelledHere].map(({ b, it }) => (
-                      <ItemChip key={it.id} b={b} it={it} onClick={() => onOpen(b)} />
+                    {[...startingHere, ...cancelledHere].map(({ b, it, moved }) => (
+                      <ItemChip
+                        key={it.id}
+                        b={b}
+                        it={it}
+                        moved={moved}
+                        draggable={isAdmin && b.status !== "CANCELLED"}
+                        onDragStart={() => {
+                          dragRef.current = { itemId: it.id, activityId: it.activityId };
+                        }}
+                        onDragEnd={() => {
+                          dragRef.current = null;
+                        }}
+                        onClick={() => onOpen(b)}
+                      />
                     ))}
                     {free > 0 && canWrite && (
                       <button
@@ -606,10 +719,18 @@ function ActivityDayGrid({
 function ItemChip({
   b,
   it,
+  moved = false,
+  draggable = false,
+  onDragStart,
+  onDragEnd,
   onClick,
 }: {
   b: CrmBooking;
   it: CrmBooking["items"][number];
+  moved?: boolean;
+  draggable?: boolean;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
   onClick: () => void;
 }) {
   const meta = STATUS_META[b.status as BookingStatus] ?? STATUS_META.NEW;
@@ -617,8 +738,20 @@ function ItemChip({
   return (
     <button
       onClick={onClick}
-      className="w-full min-w-0 overflow-hidden rounded-lg px-2 py-1.5 text-left"
-      style={{ background: cancelled ? "#f3f3f3" : tint(meta.color), borderLeft: `3px solid ${meta.color}` }}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      title={draggable ? "Перетягніть, щоб змінити час (у межах колонки)" : undefined}
+      className={`w-full min-w-0 overflow-hidden rounded-lg px-2 py-1.5 text-left ${
+        draggable ? "cursor-grab active:cursor-grabbing" : ""
+      }`}
+      style={{
+        background: cancelled ? "#f3f3f3" : tint(meta.color),
+        borderLeft: `3px solid ${meta.color}`,
+        // незбережене перенесення — пунктирна янтарна рамка
+        outline: moved ? "2px dashed #f5a623" : undefined,
+        outlineOffset: moved ? -2 : undefined,
+      }}
     >
       <div className={`truncate text-[12px] font-bold ${cancelled ? "text-[#999] line-through" : "text-[#111]"}`}>
         {b.customerName || b.customerPhone}

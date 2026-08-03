@@ -186,21 +186,96 @@ export default function BookingClient({
     [actById]
   );
 
-  // Is the whole package sequence bookable starting at `startMin`?
-  const packageFits = useCallback(
+  // Підбір розстановки комплексу: якщо канонічний порядок упирається в чужу
+  // бронь, пробуємо переставити послідовні розваги місцями (бектрекінг).
+  // Повертає конкретну розстановку або null, якщо не влазить у жодному порядку.
+  const fitPackage = useCallback(
     (pkg: PublicCatalog["packages"][number], startMin: number) => {
-      const items = expandPackage(pkg, startMin);
-      for (const it of items) {
-        const end = it.startMin + it.durationMin;
-        if (end > location.closeMin) return false;
-        const occ = occupied[it.activityId] ?? [];
-        for (let m = it.startMin; m < end; m += SLOT_STEP_MIN) {
+      const sorted = [...pkg.items].sort((a, b) => a.order - b.order);
+      const seq = sorted.filter((i) => !i.parallel);
+      const par = sorted.filter((i) => i.parallel);
+
+      const slotFree = (activityId: string, from: number, dur: number) => {
+        if (from < location.openMin || from + dur > location.closeMin) return false;
+        const occ = occupied[activityId] ?? [];
+        for (let m = from; m < from + dur; m += SLOT_STEP_MIN) {
           if (occ.includes(m)) return false;
         }
+        return true;
+      };
+
+      // паралельні (банкетна на весь час) — фіксовано від старту
+      for (const it of par) {
+        if (!slotFree(it.activityId, startMin, it.durationMin)) return null;
       }
-      return true;
+
+      type Placed = { activityId: string; startMin: number; durationMin: number; title: string };
+      const mk = (it: (typeof seq)[number], at: number): Placed => ({
+        activityId: it.activityId,
+        startMin: at,
+        durationMin: it.durationMin,
+        title: actById.get(it.activityId)?.name ?? "",
+      });
+
+      // Перестановки: pool переставляється вільно (бектрекінг, канонічний
+      // порядок у пріоритеті), tail іде строго після pool у своєму порядку.
+      const tryArrangement = (pool: typeof seq, tail: typeof seq): Placed[] | null => {
+        const acc: Placed[] = [];
+        const used = new Array(pool.length).fill(false);
+        const dfs = (cursor: number, count: number): boolean => {
+          if (count === pool.length) {
+            let c = cursor;
+            const tailPlaced: Placed[] = [];
+            for (const it of tail) {
+              if (!slotFree(it.activityId, c, it.durationMin)) return false;
+              tailPlaced.push(mk(it, c));
+              c += it.durationMin;
+            }
+            acc.push(...tailPlaced);
+            return true;
+          }
+          const tried = new Set<string>();
+          for (let i = 0; i < pool.length; i++) {
+            if (used[i]) continue;
+            const key = `${pool[i].activityId}|${pool[i].durationMin}`;
+            if (tried.has(key)) continue; // однакові позиції не дублюємо
+            tried.add(key);
+            if (!slotFree(pool[i].activityId, cursor, pool[i].durationMin)) continue;
+            used[i] = true;
+            acc.push(mk(pool[i], cursor));
+            if (dfs(cursor + pool[i].durationMin, count + 1)) return true;
+            acc.pop();
+            used[i] = false;
+          }
+          return false;
+        };
+        return dfs(startMin, 0) ? acc : null;
+      };
+
+      // Кімнати (банкетна) — завжди в кінці, якщо це взагалі можливо;
+      // повна перестановка — лише крайній випадок.
+      const games = seq.filter((it) => actById.get(it.activityId)?.category !== "room");
+      const rooms = seq.filter((it) => actById.get(it.activityId)?.category === "room");
+      const placed = tryArrangement(games, rooms) ?? tryArrangement(seq, []);
+      if (!placed) return null;
+
+      return [
+        ...placed,
+        ...par.map((it) => ({
+          activityId: it.activityId,
+          startMin,
+          durationMin: it.durationMin,
+          title: actById.get(it.activityId)?.name ?? "",
+        })),
+      ];
     },
-    [expandPackage, occupied, location]
+    [occupied, location, actById]
+  );
+
+  // Is the whole package sequence bookable starting at `startMin`?
+  const packageFits = useCallback(
+    (pkg: PublicCatalog["packages"][number], startMin: number) => fitPackage(pkg, startMin) !== null,
+    [fitPackage]
   );
 
   // Valid start minutes for a package on the current date.
@@ -294,10 +369,14 @@ export default function BookingClient({
     });
     if (pkgBooking) {
       const p = catalog.packages.find((x) => x.id === pkgBooking.packageId);
-      if (p) expandPackage(p, pkgBooking.startMin).forEach((it) => ranges.push([it.startMin, it.startMin + it.durationMin]));
+      // та сама розстановка, з якою комплекс реально бронюється
+      if (p)
+        (fitPackage(p, pkgBooking.startMin) ?? expandPackage(p, pkgBooking.startMin)).forEach((it) =>
+          ranges.push([it.startMin, it.startMin + it.durationMin])
+        );
     }
     return ranges;
-  }, [picks, actById, actDuration, pkgBooking, catalog.packages, expandPackage]);
+  }, [picks, actById, actDuration, pkgBooking, catalog.packages, fitPackage, expandPackage]);
 
   // Slot status for an activity's start minute.
   const slotStatus = useCallback(
@@ -487,7 +566,8 @@ export default function BookingClient({
     if (pkgBooking) {
       const p = catalog.packages.find((x) => x.id === pkgBooking.packageId);
       if (p) {
-        const expanded = expandPackage(p, pkgBooking.startMin);
+        // Розстановка з урахуванням перестановок (fallback — канонічний порядок)
+        const expanded = fitPackage(p, pkgBooking.startMin) ?? expandPackage(p, pkgBooking.startMin);
         // Доплата за учасників понад включену кількість: фіксована ставка
         // («Сталкер» 1500 грн) або 10% від ціни комплексу за кожного.
         const base = weekend ? p.fixedWeekend : p.fixedWeekday;
@@ -512,7 +592,7 @@ export default function BookingClient({
       addons.reduce((s, a) => s + a.price, 0) +
       (pkg?.price ?? 0);
     return { items, addons, pkg, total, arenaAddonId };
-  }, [picks, actById, people, dict, catalog.activities, catalog.addons, catalog.packages, addonQty, pkgBooking, expandPackage, weekend, location.slug, date, locationId, priceRowsOf, priceFor]);
+  }, [picks, actById, people, dict, catalog.activities, catalog.addons, catalog.packages, addonQty, pkgBooking, fitPackage, expandPackage, weekend, location.slug, date, locationId, priceRowsOf, priceFor]);
 
   // Arena closure is only meaningful with a 1-hour lasertag block selected.
   const laserActId = useMemo(
