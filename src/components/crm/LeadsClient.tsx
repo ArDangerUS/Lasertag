@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Lead = {
@@ -25,6 +25,16 @@ export default function LeadsClient({
 }) {
   const router = useRouter();
   const [leads, setLeads] = useState(initial);
+
+  // Роутер Next кешує сторінку ~30 с: після повернення з іншої вкладки CRM
+  // без цього показувався застарілий список. Примусово тягнемо свіжий стан
+  // і синхронізуємо його з локальним.
+  useEffect(() => {
+    router.refresh();
+  }, [router]);
+  useEffect(() => {
+    setLeads(initial);
+  }, [initial]);
 
   async function setStatus(id: string, status: "NEW" | "DONE") {
     const res = await fetch(`/api/crm/leads/${id}`, {
