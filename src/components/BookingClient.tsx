@@ -290,12 +290,20 @@ export default function BookingClient({
     [location, packageFits]
   );
 
-  // Fetch availability whenever location/date changes.
+  // Fetch availability whenever location/date changes (+ примусово через
+  // availTick: після власного бронювання, помилки конфлікту чи повернення
+  // на вкладку — щоб календар не показував застарілу зайнятість).
+  const [availTick, setAvailTick] = useState(0);
+  useEffect(() => {
+    const onFocus = () => setAvailTick((t) => t + 1);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
   useEffect(() => {
     if (!locationId || !date) return;
     let cancelled = false;
     setLoadingAvail(true);
-    fetch(`/api/availability?locationId=${locationId}&date=${date}`)
+    fetch(`/api/availability?locationId=${locationId}&date=${date}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         if (!cancelled) {
@@ -310,7 +318,7 @@ export default function BookingClient({
     return () => {
       cancelled = true;
     };
-  }, [locationId, date]);
+  }, [locationId, date, availTick]);
 
   // Duration-flexible activities (lasertag, banquet, Gorodok attractions) are
   // booked as 30-min slots; adjacent slots merge into longer blocks in the cart.
@@ -668,8 +676,12 @@ export default function BookingClient({
       setResult({ code: data.code, total: data.total });
       // бронювання завершено — лід більше не потрібен
       if (leadKey) fetch(`/api/leads?key=${leadKey}`, { method: "DELETE" }).catch(() => {});
+      // календар зайнятості одразу враховує щойно створену бронь
+      setAvailTick((t) => t + 1);
     } catch (e: any) {
       setError(e?.message || "Помилка");
+      // конфлікт = хтось устиг зайняти час; тягнемо свіжу зайнятість
+      setAvailTick((t) => t + 1);
     } finally {
       setSubmitting(false);
     }

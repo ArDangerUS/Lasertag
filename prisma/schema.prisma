@@ -321,6 +321,8 @@ model Lead {
   id           String   @id @default(cuid())
   sessionKey   String   @unique
   phone        String
+  // Останні 9 цифр номера: «0660799073» і «+380660799073» — один лід.
+  phoneKey     String   @default("")
   name         String   @default("")
   locationName String   @default("")
   date         String   @default("")

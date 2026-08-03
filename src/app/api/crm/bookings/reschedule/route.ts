@@ -53,6 +53,32 @@ export async function POST(req: NextRequest) {
   }
   const location = items[0].booking.location;
 
+  // Позиції ОДНІЄЇ броні не можуть перетинатися в часі — це той самий клієнт
+  // (квест 12:30–13:30 поверх лазертагу 13:00–14:00 фізично неможливий).
+  const movesMap = new Map(moves.map((m) => [m.itemId, m.startMin]));
+  const affectedBookings = await prisma.booking.findMany({
+    where: { id: { in: [...new Set(items.map((i) => i.bookingId))] } },
+    include: { items: true },
+  });
+  for (const b of affectedBookings) {
+    const ivs = b.items.map((it) => {
+      const s = movesMap.get(it.id) ?? it.startMin;
+      return { title: it.title, s, e: s + it.durationMin };
+    });
+    for (let i = 0; i < ivs.length; i++) {
+      for (let j = i + 1; j < ivs.length; j++) {
+        if (ivs[i].s < ivs[j].e && ivs[j].s < ivs[i].e) {
+          return NextResponse.json(
+            {
+              error: `Бронь ${b.code}: «${ivs[i].title}» (${minToHHMM(ivs[i].s)}–${minToHHMM(ivs[i].e)}) і «${ivs[j].title}» (${minToHHMM(ivs[j].s)}–${minToHHMM(ivs[j].e)}) перетинаються — клієнт не може бути у двох розвагах одночасно`,
+            },
+            { status: 400 }
+          );
+        }
+      }
+    }
+  }
+
   // Чужа зайнятість: всі позиції цієї локації в цю дату, КРІМ переміщуваних.
   const others = await prisma.bookingItem.findMany({
     where: {

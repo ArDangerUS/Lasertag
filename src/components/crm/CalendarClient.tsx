@@ -651,21 +651,13 @@ function ActivityDayGrid({
               const maxBusy = Math.max(busyAt(h * 60), busyAt(h * 60 + 30));
               const free = Math.max(0, cap - maxBusy);
               return (
-                <div
+                <DropCell
                   key={a.id}
-                  className="min-w-0 overflow-hidden border-l border-[#f4f4f4] p-1.5"
-                  // drop-зона: приймає лише позиції ЦІЄЇ розваги; верхня половина
-                  // клітинки = :00, нижня = :30
-                  onDragOver={(e) => {
-                    if (isAdmin && dragRef.current?.activityId === a.id) e.preventDefault();
-                  }}
-                  onDrop={(e) => {
+                  hour={h}
+                  canAccept={() => isAdmin && dragRef.current?.activityId === a.id}
+                  onDropAt={(startMin) => {
                     const drag = dragRef.current;
-                    if (!isAdmin || !drag || drag.activityId !== a.id || !onMove) return;
-                    e.preventDefault();
-                    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-                    const half = e.clientY - rect.top > rect.height / 2 ? 30 : 0;
-                    onMove(drag.itemId, h * 60 + half);
+                    if (drag && onMove) onMove(drag.itemId, startMin);
                     dragRef.current = null;
                   }}
                 >
@@ -705,12 +697,63 @@ function ActivityDayGrid({
                       </div>
                     )}
                   </div>
-                </div>
+                </DropCell>
               );
             })}
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/* Drop-зона однієї клітинки (розвага × година): під час перетягування
+   підсвічує половину, куди впаде позиція — :00 (верх) або :30 (низ),
+   з великою підказкою часу. */
+function DropCell({
+  hour,
+  canAccept,
+  onDropAt,
+  children,
+}: {
+  hour: number;
+  canAccept: () => boolean;
+  onDropAt: (startMin: number) => void;
+  children: React.ReactNode;
+}) {
+  const [hoverHalf, setHoverHalf] = useState<0 | 30 | null>(null);
+
+  const halfFromEvent = (e: React.DragEvent<HTMLDivElement>): 0 | 30 => {
+    const r = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    return e.clientY - r.top > r.height / 2 ? 30 : 0;
+  };
+
+  return (
+    <div
+      className="relative min-w-0 overflow-hidden border-l border-[#f4f4f4] p-1.5"
+      onDragOver={(e) => {
+        if (!canAccept()) return;
+        e.preventDefault();
+        setHoverHalf(halfFromEvent(e));
+      }}
+      onDragLeave={() => setHoverHalf(null)}
+      onDrop={(e) => {
+        if (!canAccept()) return;
+        e.preventDefault();
+        const half = halfFromEvent(e);
+        setHoverHalf(null);
+        onDropAt(hour * 60 + half);
+      }}
+    >
+      {children}
+      {hoverHalf != null && (
+        <div
+          className="pointer-events-none absolute inset-x-1 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-[#56b800] bg-[#f0fbe8]/90 text-[13px] font-extrabold text-[#3c6b0c]"
+          style={hoverHalf === 0 ? { top: 2, bottom: "50%" } : { top: "50%", bottom: 2 }}
+        >
+          → {hour}:{hoverHalf === 0 ? "00" : "30"}
+        </div>
+      )}
     </div>
   );
 }

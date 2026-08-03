@@ -251,5 +251,12 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
   // KeyCRM: заявка падає в воронку у фоні (не блокує відповідь клієнту)
   pushBookingToKeycrm(booking.id).catch(() => {});
 
+  // Ліди з цим номером більше не потрібні — бронь уже є (порівнюємо хвіст,
+  // щоб «066...» і «+38066...» вважались одним номером)
+  const phoneDigits = input.customerPhone.replace(/\D/g, "");
+  if (phoneDigits.length >= 9) {
+    prisma.lead.deleteMany({ where: { phoneKey: phoneDigits.slice(-9) } }).catch(() => {});
+  }
+
   return booking;
 }

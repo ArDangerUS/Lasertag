@@ -30,28 +30,36 @@ export async function POST(req: NextRequest) {
   const d = parsed.data;
 
   // Мінімум 9 цифр — інакше це ще не номер
-  if (d.phone.replace(/\D/g, "").length < 9) {
+  const digits = d.phone.replace(/\D/g, "");
+  if (digits.length < 9) {
     return NextResponse.json({ error: "short" }, { status: 400 });
   }
+  // «0660799073» і «+380660799073» — той самий номер: порівнюємо хвіст
+  const phoneKey = digits.slice(-9);
 
-  await prisma.lead.upsert({
-    where: { sessionKey: d.sessionKey },
-    create: {
-      sessionKey: d.sessionKey,
-      phone: d.phone,
-      name: d.name,
-      locationName: d.locationName,
-      date: d.date,
-      people: d.people,
-    },
-    update: {
-      phone: d.phone,
-      name: d.name,
-      locationName: d.locationName,
-      date: d.date,
-      people: d.people,
-    },
-  });
+  const data = {
+    phone: d.phone,
+    phoneKey,
+    name: d.name,
+    locationName: d.locationName,
+    date: d.date,
+    people: d.people,
+  };
+
+  // Шукаємо існуючий лід: спершу за сесією, потім за номером (щоб той самий
+  // телефон з іншого браузера/формату не створював дубль).
+  const existing =
+    (await prisma.lead.findUnique({ where: { sessionKey: d.sessionKey } })) ??
+    (await prisma.lead.findFirst({ where: { phoneKey }, orderBy: { updatedAt: "desc" } }));
+
+  if (existing) {
+    await prisma.lead.update({
+      where: { id: existing.id },
+      data: existing.sessionKey === d.sessionKey ? data : { ...data, sessionKey: d.sessionKey },
+    });
+  } else {
+    await prisma.lead.create({ data: { sessionKey: d.sessionKey, ...data } });
+  }
   return NextResponse.json({ ok: true });
 }
 
