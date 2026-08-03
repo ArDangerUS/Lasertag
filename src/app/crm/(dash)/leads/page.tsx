@@ -13,6 +13,7 @@ export default async function LeadsPage() {
   return (
     <LeadsClient
       canWrite={!!user && can(user.role, "write")}
+      isAdmin={user?.role === "ADMIN"}
       leads={leads.map((l) => ({
         id: l.id,
         phone: l.phone,

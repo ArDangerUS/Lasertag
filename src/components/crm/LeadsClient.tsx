@@ -14,7 +14,15 @@ type Lead = {
   updatedAt: string;
 };
 
-export default function LeadsClient({ leads: initial, canWrite }: { leads: Lead[]; canWrite: boolean }) {
+export default function LeadsClient({
+  leads: initial,
+  canWrite,
+  isAdmin = false,
+}: {
+  leads: Lead[];
+  canWrite: boolean;
+  isAdmin?: boolean;
+}) {
   const router = useRouter();
   const [leads, setLeads] = useState(initial);
 
@@ -92,10 +100,12 @@ export default function LeadsClient({ leads: initial, canWrite }: { leads: Lead[
                         ↩ У нові
                       </button>
                     )}
-                    {canWrite && (
+                    {/* видалення — лише адміністратор */}
+                    {isAdmin && (
                       <button
                         onClick={() => remove(l.id)}
                         className="rounded-full px-2.5 py-1.5 text-[12px] text-[#ff7a7a] hover:bg-[#2a1414]"
+                        title="Видалити (лише адміністратор)"
                       >
                         ✕
                       </button>
