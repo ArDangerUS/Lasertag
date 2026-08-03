@@ -44,6 +44,22 @@ export default function BookingClient({
   const [locationId, setLocationId] = useState(locations[0]?.id ?? "");
   const [people, setPeople] = useState(10);
   const [customerPhone, setPhone] = useState("");
+  // Ключ сесії для «лідів»: телефон зберігається в CRM, щойно введений,
+  // навіть якщо бронювання не завершили. Один ключ = один запис (без дублів).
+  const [leadKey, setLeadKey] = useState("");
+  useEffect(() => {
+    try {
+      const existing = sessionStorage.getItem("g75-lead-key");
+      if (existing) setLeadKey(existing);
+      else {
+        const k = crypto.randomUUID();
+        sessionStorage.setItem("g75-lead-key", k);
+        setLeadKey(k);
+      }
+    } catch {
+      setLeadKey(crypto.randomUUID());
+    }
+  }, []);
   const [customerName, setName] = useState("");
   const [chosen, setChosen] = useState<Record<string, boolean>>({});
   const [picks, setPicks] = useState<Pick[]>([]);
@@ -60,6 +76,33 @@ export default function BookingClient({
   const [expandedPerks, setExpandedPerks] = useState<Record<string, boolean>>({});
 
   const location = locations.find((l) => l.id === locationId) ?? locations[0];
+
+  // Тихе збереження ліда: щойно у телефоні достатньо цифр — надсилаємо в CRM
+  // (з дебаунсом, щоб не смикати сервер на кожну клавішу).
+  const lastLeadPayload = useRef("");
+  useEffect(() => {
+    if (!leadKey) return;
+    const digits = customerPhone.replace(/\D/g, "");
+    if (digits.length < 9) return;
+    const payload = JSON.stringify({
+      sessionKey: leadKey,
+      phone: customerPhone.trim(),
+      name: customerName.trim(),
+      locationName: location?.name ?? "",
+      date,
+      people,
+    });
+    if (payload === lastLeadPayload.current) return;
+    const t = setTimeout(() => {
+      lastLeadPayload.current = payload;
+      fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+      }).catch(() => {});
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [leadKey, customerPhone, customerName, location?.name, date, people]);
   const weekend = usesWeekendRate(date);
 
   // Activities available at the current location.
@@ -543,6 +586,8 @@ export default function BookingClient({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Помилка");
       setResult({ code: data.code, total: data.total });
+      // бронювання завершено — лід більше не потрібен
+      if (leadKey) fetch(`/api/leads?key=${leadKey}`, { method: "DELETE" }).catch(() => {});
     } catch (e: any) {
       setError(e?.message || "Помилка");
     } finally {

@@ -314,6 +314,22 @@ model BookingAddon {
   price     Int
 }
 
+// Лід з незавершеної форми бронювання: відвідувач ввів телефон, але не
+// натиснув «Забронювати». Одна сесія браузера = один запис (upsert за
+// sessionKey), успішне бронювання лід прибирає.
+model Lead {
+  id           String   @id @default(cuid())
+  sessionKey   String   @unique
+  phone        String
+  name         String   @default("")
+  locationName String   @default("")
+  date         String   @default("")
+  people       Int      @default(0)
+  status       String   @default("NEW") // NEW | DONE
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 // Внутрішні коментарі менеджерів до броні (журнал обговорення). Текст без
 // обмеження довжини; видаляти може лише адміністратор.
 model BookingComment {
