@@ -67,6 +67,11 @@ export function weekRangeLabel(mondayISO: string): string {
   return `${a.getDate()} ${MONTHS_UK[a.getMonth()]} – ${b.getDate()} ${MONTHS_UK[b.getMonth()]}`;
 }
 
+export const MONTHS_NOM_UK = [
+  "Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень",
+  "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень",
+];
+
 export function isWeekendISO(iso: string): boolean {
   const day = fromISO(iso).getDay();
   return day === 0 || day === 6;

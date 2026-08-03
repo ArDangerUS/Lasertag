@@ -1,21 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { CrmBooking, CrmCatalog } from "@/lib/crm-data";
 import { STATUS_META, BOOKING_STATUSES, type BookingStatus } from "@/lib/constants";
 import { fmtMoney, minToHHMM } from "@/lib/pricing";
 import Modal from "./Modal";
 
+type Comment = { id: string; authorName: string; text: string; createdAt: string };
+
 export default function BookingEditor({
   booking,
   catalog,
   canWrite,
+  isAdmin = false,
   onClose,
   onSaved,
 }: {
   booking: CrmBooking;
   catalog: CrmCatalog;
   canWrite: boolean;
+  isAdmin?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -33,6 +37,50 @@ export default function BookingEditor({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Внутрішні коментарі менеджерів (окремо від короткого коментаря клієнта)
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [commentBusy, setCommentBusy] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/crm/bookings/${booking.id}/comments`)
+      .then((r) => r.json())
+      .then((d) => setComments(d.comments ?? []))
+      .catch(() => {});
+  }, [booking.id]);
+
+  async function addComment() {
+    const text = newComment.trim();
+    if (!text) return;
+    setCommentBusy(true);
+    try {
+      const res = await fetch(`/api/crm/bookings/${booking.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Помилка");
+      setComments((cs) => [...cs, data.comment]);
+      setNewComment("");
+    } catch (e: any) {
+      alert(e?.message || "Помилка");
+    } finally {
+      setCommentBusy(false);
+    }
+  }
+
+  async function deleteComment(id: string) {
+    if (!confirm("Видалити коментар? Цю дію не можна буде скасувати.")) return;
+    try {
+      const res = await fetch(`/api/crm/comments/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Помилка");
+      setComments((cs) => cs.filter((c) => c.id !== id));
+    } catch (e: any) {
+      alert(e?.message || "Помилка");
+    }
+  }
 
   // Rooms selectable for an item = rooms mapped to its activity at this location.
   const roomOptions = (activityId: string) => {
@@ -220,8 +268,66 @@ export default function BookingEditor({
           </div>
         </div>
 
+        {/* Внутрішні коментарі менеджерів */}
         <div>
-          <Label>Коментар</Label>
+          <Label>Коментарі менеджерів</Label>
+          <div className="flex flex-col gap-2">
+            {comments.map((c) => (
+              <div key={c.id} className="rounded-xl bg-[#0e0e0e] px-3 py-2.5">
+                <div className="flex items-center gap-2 text-[11px] text-[#888]">
+                  <span className="font-bold text-[#bbb]">{c.authorName || "—"}</span>
+                  <span>
+                    {new Date(c.createdAt).toLocaleString("uk-UA", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                  {isAdmin && (
+                    <button
+                      onClick={() => deleteComment(c.id)}
+                      className="ml-auto rounded-full px-2 py-0.5 text-[11px] text-[#ff7a7a] hover:bg-[#2a1414]"
+                      title="Видалити (лише адміністратор)"
+                    >
+                      Видалити
+                    </button>
+                  )}
+                </div>
+                <div className="mt-1 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-[#ddd]">
+                  {c.text}
+                </div>
+              </div>
+            ))}
+            {comments.length === 0 && (
+              <div className="rounded-xl border border-dashed border-[#333] px-3 py-3 text-center text-[12px] text-[#777]">
+                Коментарів поки немає
+              </div>
+            )}
+            {canWrite && (
+              <div className="flex flex-col gap-2">
+                <textarea
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  rows={3}
+                  placeholder="Напишіть коментар — довжина не обмежена…"
+                  className="w-full rounded-xl border border-[#333] bg-[#0e0e0e] px-3 py-2 text-[14px] text-white"
+                />
+                <button
+                  onClick={addComment}
+                  disabled={commentBusy || !newComment.trim()}
+                  className="self-end rounded-full bg-[#0e0e0e] px-4 py-2 text-[12px] font-bold text-[#56EF02] ring-1 ring-[#333] transition hover:ring-[#56EF02] disabled:opacity-50"
+                >
+                  {commentBusy ? "Додавання…" : "+ Додати коментар"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <Label>Коментар клієнта (з сайту)</Label>
           <textarea
             value={comment}
             disabled={!canWrite}

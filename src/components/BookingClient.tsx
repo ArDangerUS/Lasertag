@@ -606,6 +606,27 @@ export default function BookingClient({
         </div>
       </header>
 
+      {/* Плаваюча кнопка Telegram — тільки на телефонах, завжди поверх сторінки */}
+      <a
+        href="https://t.me/Lasertag_G75"
+        target="_blank"
+        rel="noreferrer"
+        aria-label="Telegram"
+        className="fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#229ED9] text-white shadow-[0_6px_20px_rgba(34,158,217,0.45)] transition active:scale-95 md:hidden"
+        style={{ bottom: "calc(20px + env(safe-area-inset-bottom))" }}
+      >
+        <svg
+          width="26"
+          height="26"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          aria-hidden="true"
+          style={{ marginLeft: -2, marginTop: 2 }}
+        >
+          <path d="M23.91 3.79 20.3 20.84c-.25 1.21-.98 1.5-2 .94l-5.5-4.07-2.66 2.57c-.3.3-.55.56-1.1.56-.72 0-.6-.27-.84-.95L6.3 13.7l-5.45-1.7c-1.18-.35-1.19-1.16.26-1.75l21.26-8.2c.97-.43 1.9.24 1.53 1.73Z" />
+        </svg>
+      </a>
+
       <div className="mx-auto max-w-[1280px] px-5 pb-16 pt-8 md:px-10">
         {/* Title */}
         <div className="mb-6 flex flex-wrap items-baseline gap-4">

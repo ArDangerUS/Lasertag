@@ -6,6 +6,7 @@ import { STATUS_META, BOOKING_STATUSES, type BookingStatus } from "@/lib/constan
 import { fmtMoney, minToHHMM } from "@/lib/pricing";
 import {
   toISO,
+  fromISO,
   mondayOf,
   weekDays,
   addDays,
@@ -15,6 +16,7 @@ import {
   longDate,
   weekdayFull,
   isWeekendISO,
+  MONTHS_NOM_UK,
 } from "@/lib/dates";
 import BookingEditor from "./BookingEditor";
 import BookingCreate from "./BookingCreate";
@@ -31,9 +33,11 @@ const HOURS = Array.from({ length: 12 }, (_, i) => 10 + i); // 10:00–21:00
 export default function CalendarClient({
   catalog,
   canWrite,
+  isAdmin = false,
 }: {
   catalog: CrmCatalog;
   canWrite: boolean;
+  isAdmin?: boolean;
 }) {
   const [view, setView] = useState<View>("week");
   const [anchor, setAnchor] = useState<string>(todayISO());
@@ -43,6 +47,7 @@ export default function CalendarClient({
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<CrmBooking | null>(null);
   const [creating, setCreating] = useState<null | { date: string; locationId?: string; startMin?: number }>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const monday = useMemo(() => mondayOf(anchor), [anchor]);
   const range = useMemo(() => {
@@ -159,8 +164,26 @@ export default function CalendarClient({
             >
               ‹
             </button>
-            <div className="min-w-[150px] text-center text-[15px] font-bold">
-              {view === "week" ? weekRangeLabel(monday) : `${weekdayFull(anchor)}, ${longDate(anchor)}`}
+            <div className="relative">
+              <button
+                onClick={() => setPickerOpen((o) => !o)}
+                className="min-w-[150px] rounded-full px-3 py-1 text-center text-[15px] font-bold transition hover:bg-[#0e0e0e] hover:text-[#56EF02]"
+                title="Відкрити календар"
+              >
+                {view === "week" ? weekRangeLabel(monday) : `${weekdayFull(anchor)}, ${longDate(anchor)}`}
+                <span className="ml-1.5 text-[11px] text-[#777]">▾</span>
+              </button>
+              {pickerOpen && (
+                <MonthPicker
+                  anchor={anchor}
+                  view={view}
+                  onPick={(iso) => {
+                    setAnchor(iso);
+                    setPickerOpen(false);
+                  }}
+                  onClose={() => setPickerOpen(false)}
+                />
+              )}
             </div>
             <button
               onClick={() => navigate(1)}
@@ -196,6 +219,7 @@ export default function CalendarClient({
           booking={editing}
           catalog={catalog}
           canWrite={canWrite}
+          isAdmin={isAdmin}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -635,6 +659,103 @@ function DayChip({ b, onClick }: { b: CrmBooking; onClick: () => void }) {
 }
 
 /* ---------------- bits ---------------- */
+
+// Попап-календар: клік по назві періоду відкриває місяць; клік по дню
+// переносить на нього (у тижневому режимі — на його тиждень).
+function MonthPicker({
+  anchor,
+  view,
+  onPick,
+  onClose,
+}: {
+  anchor: string;
+  view: View;
+  onPick: (iso: string) => void;
+  onClose: () => void;
+}) {
+  const [ym, setYm] = useState(() => {
+    const d = fromISO(anchor);
+    return { y: d.getFullYear(), m: d.getMonth() };
+  });
+  const firstISO = toISO(new Date(ym.y, ym.m, 1, 12));
+  const gridStart = mondayOf(firstISO);
+  const cells = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
+  const today = todayISO();
+  const selWeekMon = mondayOf(anchor);
+
+  function shift(dir: number) {
+    setYm(({ y, m }) => {
+      const d = new Date(y, m + dir, 1, 12);
+      return { y: d.getFullYear(), m: d.getMonth() };
+    });
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 z-30" onClick={onClose} />
+      <div className="absolute left-1/2 top-full z-40 mt-2 w-[292px] -translate-x-1/2 rounded-2xl border border-[#2a2a2a] bg-[#0e0e0e] p-3 shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
+        <div className="mb-2 flex items-center justify-between">
+          <button
+            onClick={() => shift(-1)}
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-[#161616] text-[#bbb] hover:text-white"
+          >
+            ‹
+          </button>
+          <div className="text-[13px] font-bold">
+            {MONTHS_NOM_UK[ym.m]} {ym.y}
+          </div>
+          <button
+            onClick={() => shift(1)}
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-[#161616] text-[#bbb] hover:text-white"
+          >
+            ›
+          </button>
+        </div>
+        <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-[#666]">
+          {["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "НД"].map((w) => (
+            <span key={w}>{w}</span>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {cells.map((iso) => {
+            const d = fromISO(iso);
+            const inMonth = d.getMonth() === ym.m;
+            const isToday = iso === today;
+            const selected = view === "week" ? mondayOf(iso) === selWeekMon : iso === anchor;
+            return (
+              <button
+                key={iso}
+                onClick={() => onPick(iso)}
+                className={`flex h-8 items-center justify-center rounded-lg text-[12px] transition ${
+                  selected
+                    ? "bg-[#56EF02] font-bold text-[#111]"
+                    : isToday
+                      ? "bg-[#161616] font-bold text-[#56EF02] ring-1 ring-[#56EF02]"
+                      : inMonth
+                        ? "text-[#ddd] hover:bg-[#1f1f1f]"
+                        : "text-[#555] hover:bg-[#1a1a1a]"
+                }`}
+              >
+                {d.getDate()}
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-2 flex justify-between">
+          <button
+            onClick={() => onPick(today)}
+            className="rounded-full px-3 py-1 text-[11px] font-bold text-[#56EF02] hover:bg-[#161616]"
+          >
+            Сьогодні
+          </button>
+          <button onClick={onClose} className="rounded-full px-3 py-1 text-[11px] text-[#888] hover:bg-[#161616]">
+            Закрити
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
 
 function ToggleBtn({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
   return (

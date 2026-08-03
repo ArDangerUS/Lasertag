@@ -44,18 +44,25 @@ export default function BookingCreate({
       .filter(Boolean) as { id: string; name: string }[];
   };
 
-  function addLine() {
-    const a = locActivities[0];
+  function addLineFor(activityId: string) {
+    const a = locActivities.find((x) => x.id === activityId);
     if (!a) return;
-    setLines((ls) => [
-      ...ls,
-      {
-        activityId: a.id,
-        startMin: initial.startMin ?? 600,
-        durationMin: a.durationOptions[0] ?? a.durationMin,
-        people,
-      },
-    ]);
+    const close = catalog.locations.find((l) => l.id === locationId)?.closeMin ?? 1260;
+    setLines((ls) => {
+      // нова лінія стартує після кінця попередньої, щоб зручно набирати програму
+      const start = ls.length
+        ? ls[ls.length - 1].startMin + ls[ls.length - 1].durationMin
+        : initial.startMin ?? 600;
+      return [
+        ...ls,
+        {
+          activityId: a.id,
+          startMin: Math.min(start, close - 30),
+          durationMin: a.durationOptions[0] ?? a.durationMin,
+          people,
+        },
+      ];
+    });
   }
 
   function updateLine(i: number, patch: Partial<Line>) {
@@ -186,14 +193,18 @@ export default function BookingCreate({
 
         {/* activity lines */}
         <div>
-          <div className="mb-2 flex items-center justify-between">
-            <Label>Розваги</Label>
-            <button
-              onClick={addLine}
-              className="rounded-full bg-[#0e0e0e] px-3 py-1.5 text-[12px] font-bold text-[#56EF02]"
-            >
-              + Додати розвагу
-            </button>
+          <Label>Розваги</Label>
+          {/* Кнопки як у додатків: клік = додати лінію з цією розвагою */}
+          <div className="mb-2 flex flex-wrap gap-2">
+            {locActivities.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => addLineFor(a.id)}
+                className="rounded-full border border-[#333] bg-[#0e0e0e] px-3 py-1.5 text-[12px] font-semibold text-[#bbb] transition hover:border-[#56EF02] hover:text-white"
+              >
+                {a.icon} {a.name} +
+              </button>
+            ))}
           </div>
           <div className="flex flex-col gap-2">
             {lines.map((l, i) => {

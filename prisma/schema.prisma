@@ -256,6 +256,7 @@ model Booking {
   telegramChatId  String @default("")
   // ID картки у KeyCRM (якщо інтеграцію ввімкнено), щоб оновлювати/видаляти її
   keycrmCardId    String @default("")
+  crmComments     BookingComment[]
   telegramUsername String @default("")
 
   items      BookingItem[]
@@ -301,6 +302,20 @@ model BookingAddon {
   title     String
   qty       Int     @default(1)
   price     Int
+}
+
+// Внутрішні коментарі менеджерів до броні (журнал обговорення). Текст без
+// обмеження довжини; видаляти може лише адміністратор.
+model BookingComment {
+  id         String   @id @default(cuid())
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId  String
+  authorId   String?
+  authorName String   @default("")
+  text       String
+  createdAt  DateTime @default(now())
+
+  @@index([bookingId])
 }
 
 // ---------------------------------------------------------------------------

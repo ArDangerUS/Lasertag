@@ -11,6 +11,7 @@ export default async function CrmCalendarPage() {
     <CalendarClient
       catalog={catalog}
       canWrite={!!user && can(user.role, "write")}
+      isAdmin={user?.role === "ADMIN"}
     />
   );
 }
