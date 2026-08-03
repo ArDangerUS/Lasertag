@@ -26,7 +26,6 @@ export default function BookingEditor({
   const [status, setStatus] = useState<BookingStatus>(booking.status as BookingStatus);
   const [name, setName] = useState(booking.customerName);
   const [phone, setPhone] = useState(booking.customerPhone);
-  const [comment, setComment] = useState(booking.comment);
   const [people, setPeople] = useState(booking.people);
   const [prepaid, setPrepaid] = useState(booking.prepaidAmount);
   const [itemPrices, setItemPrices] = useState<Record<string, number>>(
@@ -106,7 +105,6 @@ export default function BookingEditor({
           status,
           customerName: name,
           customerPhone: phone,
-          comment,
           people,
           prepaidAmount: Number(prepaid) || 0,
           totalPrice: total,
@@ -155,6 +153,10 @@ export default function BookingEditor({
           </span>
           {booking.createdByName && (
             <span className="rounded-full bg-[#0e0e0e] px-3 py-1">автор: {booking.createdByName}</span>
+          )}
+          {/* службова примітка з сайту (наприклад, назва комплексу) */}
+          {booking.comment && (
+            <span className="rounded-full bg-[#0e0e0e] px-3 py-1 text-[#56EF02]">{booking.comment}</span>
           )}
         </div>
 
@@ -326,17 +328,6 @@ export default function BookingEditor({
           </div>
         </div>
 
-        <div>
-          <Label>Коментар клієнта (з сайту)</Label>
-          <textarea
-            value={comment}
-            disabled={!canWrite}
-            onChange={(e) => setComment(e.target.value)}
-            rows={2}
-            className="w-full rounded-xl border border-[#333] bg-[#0e0e0e] px-3 py-2 text-[14px] text-white"
-          />
-        </div>
-
         {booking.telegramUsername && (
           <div className="text-[12px] text-[#888]">Telegram клієнта: {booking.telegramUsername}</div>
         )}
@@ -349,7 +340,8 @@ export default function BookingEditor({
         {error && <div className="text-center text-[13px] text-[#ff8a5c]">{error}</div>}
 
         <div className="flex items-center gap-2">
-          {canWrite && (
+          {/* видалення — лише адміністратор; менеджер скасовує статусом */}
+          {isAdmin && (
             <button
               onClick={remove}
               disabled={saving}

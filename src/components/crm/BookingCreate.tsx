@@ -23,7 +23,6 @@ export default function BookingCreate({
   const [people, setPeople] = useState(10);
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
-  const [comment, setComment] = useState("");
   // Коментар менеджера: після створення броні падає у стрічку коментарів
   const [managerComment, setManagerComment] = useState("");
   const [status, setStatus] = useState("CONFIRMED");
@@ -86,7 +85,6 @@ export default function BookingCreate({
           people,
           customerName: name,
           customerPhone: phone,
-          comment,
           status,
           items: lines.map((l) => ({
             activityId: l.activityId,

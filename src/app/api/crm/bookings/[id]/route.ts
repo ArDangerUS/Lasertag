@@ -30,7 +30,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!can(user.role, "write")) return NextResponse.json({ error: "Немає прав" }, { status: 403 });
+  // Видаляти броні може лише адміністратор; менеджери скасовують статусом.
+  if (user.role !== "ADMIN") {
+    return NextResponse.json(
+      { error: "Видаляти броні може лише адміністратор. Використайте статус «Скасована»." },
+      { status: 403 }
+    );
+  }
   try {
     await deleteBooking(params.id, user);
     return NextResponse.json({ ok: true });
