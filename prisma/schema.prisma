@@ -32,7 +32,7 @@ model Location {
   active    Boolean  @default(true)
 
   activities LocationActivity[]
-  packages   Package[]
+  packages   PackageLocation[]
   bookings   Booking[]
   rooms      Room[]
   createdAt  DateTime @default(now())
@@ -182,9 +182,8 @@ model AddonPhotoBlob {
 model Package {
   id        String  @id @default(cuid())
   key       String  @unique
-  // Packages are location-specific (content and prices differ per location).
-  location   Location? @relation(fields: [locationId], references: [id])
-  locationId String?
+  // Комплекс може продаватися на кількох локаціях (той самий склад і ціни).
+  locations PackageLocation[]
   nameUk    String
   nameRu    String  @default("")
   nameEn    String  @default("")
@@ -211,6 +210,17 @@ model Package {
 }
 
 // The bookable sequence of a package (only calendar-occupying activities).
+// Join: комплекс ↔ локації, де він продається.
+model PackageLocation {
+  id         String   @id @default(cuid())
+  package    Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  packageId  String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  locationId String
+
+  @@unique([packageId, locationId])
+}
+
 model PackageItem {
   id          String   @id @default(cuid())
   package     Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)

@@ -63,7 +63,7 @@ export type PubAddon = {
 export type PubPackageItem = { activityId: string; durationMin: number; order: number; parallel: boolean };
 export type PubPackage = {
   id: string;
-  locationId: string | null;
+  locationIds: string[];
   name: string;
   perks: string[];
   icon: string;
@@ -102,7 +102,7 @@ export async function loadPublicCatalog(locale: Locale): Promise<PublicCatalog> 
     prisma.package.findMany({
       where: { active: true },
       orderBy: { sortOrder: "asc" },
-      include: { items: { orderBy: { order: "asc" } } },
+      include: { items: { orderBy: { order: "asc" } }, locations: true },
     }),
   ]);
 
@@ -154,7 +154,7 @@ export async function loadPublicCatalog(locale: Locale): Promise<PublicCatalog> 
     })),
     packages: packages.map((p) => ({
       id: p.id,
-      locationId: p.locationId,
+      locationIds: p.locations.map((x) => x.locationId),
       name: localizedName(p, locale),
       perks: perksFor(p, locale)
         .split("\n")

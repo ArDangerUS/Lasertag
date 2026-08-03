@@ -22,7 +22,7 @@ export default async function SettingsPage() {
     }),
     prisma.package.findMany({
       orderBy: { sortOrder: "asc" },
-      include: { items: { orderBy: { order: "asc" } } },
+      include: { items: { orderBy: { order: "asc" } }, locations: true },
     }),
   ]);
 
@@ -73,7 +73,7 @@ export default async function SettingsPage() {
         nameEn: p.nameEn,
         icon: p.icon,
         active: p.active,
-        locationId: p.locationId ?? "",
+        locationIds: p.locations.map((x) => x.locationId),
         maxPeople: p.maxPeople,
         extraPersonFee: p.extraPersonFee,
         fixedPriceWeekday: p.fixedPriceWeekday,

@@ -11,7 +11,7 @@ const schema = z.object({
   nameUk: z.string().min(1).max(160),
   nameRu: z.string().max(160).default(""),
   nameEn: z.string().max(160).default(""),
-  locationId: z.string().min(1),
+  locationIds: z.array(z.string().min(1)).min(1).max(10),
   maxPeople: z.number().int().min(1).max(999),
   // 0 = стандартне правило 10% від ціни комплексу
   extraPersonFee: z.number().int().min(0).max(100_000).default(0),
@@ -34,8 +34,10 @@ export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Перевірте поля" }, { status: 400 });
 
-  const loc = await prisma.location.findUnique({ where: { id: parsed.data.locationId } });
-  if (!loc) return NextResponse.json({ error: "Локацію не знайдено" }, { status: 400 });
+  const locs = await prisma.location.findMany({ where: { id: { in: parsed.data.locationIds } } });
+  if (locs.length !== parsed.data.locationIds.length) {
+    return NextResponse.json({ error: "Локацію не знайдено" }, { status: 400 });
+  }
 
   const last = await prisma.package.findFirst({ orderBy: { sortOrder: "desc" } });
   const pkg = await prisma.package.create({
@@ -44,7 +46,7 @@ export async function POST(req: NextRequest) {
       nameUk: parsed.data.nameUk,
       nameRu: parsed.data.nameRu,
       nameEn: parsed.data.nameEn,
-      locationId: parsed.data.locationId,
+      locations: { create: parsed.data.locationIds.map((locationId) => ({ locationId })) },
       maxPeople: parsed.data.maxPeople,
       extraPersonFee: parsed.data.extraPersonFee,
       fixedPriceWeekday: parsed.data.fixedPriceWeekday,
@@ -58,7 +60,7 @@ export async function POST(req: NextRequest) {
     action: "CREATE",
     entity: "Комплекс",
     entityId: pkg.id,
-    summary: `створив(-ла) комплекс «${pkg.nameUk}» (${loc.name}, ${pkg.fixedPriceWeekday}/${pkg.fixedPriceWeekend} грн)`,
+    summary: `створив(-ла) комплекс «${pkg.nameUk}» (${locs.map((l) => l.name).join(", ")}, ${pkg.fixedPriceWeekday}/${pkg.fixedPriceWeekend} грн)`,
   });
 
   return NextResponse.json({ ok: true, id: pkg.id });

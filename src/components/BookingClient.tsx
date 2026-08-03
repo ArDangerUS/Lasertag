@@ -113,7 +113,7 @@ export default function BookingClient({
 
   // Packages offered at the current location.
   const locPackages = useMemo(
-    () => catalog.packages.filter((p) => p.locationId === locationId),
+    () => catalog.packages.filter((p) => p.locationIds.includes(locationId)),
     [catalog.packages, locationId]
   );
 

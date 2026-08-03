@@ -53,7 +53,7 @@ type PkgRow = {
   nameEn: string;
   icon: string;
   active: boolean;
-  locationId: string;
+  locationIds: string[];
   maxPeople: number;
   extraPersonFee: number; // 0 = 10% від ціни комплексу
   fixedPriceWeekday: number;
@@ -1127,7 +1127,7 @@ function CreatePackageForm({ locations, onDone }: { locations: Loc[]; onDone: ()
   const [nameUk, setNameUk] = useState("");
   const [nameRu, setNameRu] = useState("");
   const [nameEn, setNameEn] = useState("");
-  const [locationId, setLocationId] = useState(locations[0]?.id ?? "");
+  const [locationIds, setLocationIds] = useState<string[]>(locations[0] ? [locations[0].id] : []);
   const [wd, setWd] = useState("");
   const [we, setWe] = useState("");
   const [maxPeople, setMaxPeople] = useState("10");
@@ -1139,6 +1139,7 @@ function CreatePackageForm({ locations, onDone }: { locations: Loc[]; onDone: ()
   async function create() {
     setError("");
     if (!nameUk.trim()) return setError("Вкажіть назву (укр)");
+    if (!locationIds.length) return setError("Оберіть хоча б одну локацію");
     const w1 = parseInt(wd, 10);
     const w2 = parseInt(we, 10);
     if (!Number.isFinite(w1) || !Number.isFinite(w2)) return setError("Вкажіть ціни (будні та вихідні)");
@@ -1151,7 +1152,7 @@ function CreatePackageForm({ locations, onDone }: { locations: Loc[]; onDone: ()
           nameUk,
           nameRu,
           nameEn,
-          locationId,
+          locationIds,
           maxPeople: Math.max(1, parseInt(maxPeople, 10) || 10),
           fixedPriceWeekday: w1,
           fixedPriceWeekend: w2,
@@ -1175,14 +1176,28 @@ function CreatePackageForm({ locations, onDone }: { locations: Loc[]; onDone: ()
         <input placeholder="Назва (рос)" value={nameRu} onChange={(e) => setNameRu(e.target.value)} className={inputCls} />
         <input placeholder="Назва (англ)" value={nameEn} onChange={(e) => setNameEn(e.target.value)} className={inputCls} />
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <select value={locationId} onChange={(e) => setLocationId(e.target.value)} className={inputCls}>
-          {locations.map((l) => (
-            <option key={l.id} value={l.id}>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {locations.map((l) => {
+          const on = locationIds.includes(l.id);
+          return (
+            <button
+              key={l.id}
+              onClick={() =>
+                setLocationIds((ids) => (on ? ids.filter((x) => x !== l.id) : [...ids, l.id]))
+              }
+              className="rounded-full px-3.5 py-1.5 text-[12px] font-semibold"
+              style={{
+                background: on ? "#56EF02" : "#161616",
+                color: on ? "#111" : "#bbb",
+                border: `1px solid ${on ? "#56EF02" : "#333"}`,
+              }}
+            >
               {l.name}
-            </option>
-          ))}
-        </select>
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-3">
         <input placeholder="Ціна будні, грн *" value={wd} onChange={(e) => setWd(e.target.value)} inputMode="numeric" className={inputCls} />
         <input placeholder="Ціна вихідні, грн *" value={we} onChange={(e) => setWe(e.target.value)} inputMode="numeric" className={inputCls} />
         <input placeholder="Включено учасників" value={maxPeople} onChange={(e) => setMaxPeople(e.target.value)} inputMode="numeric" className={inputCls} />
@@ -1214,7 +1229,7 @@ function PackageCard({
   const router = useRouter();
   const [active, setActive] = useState(pkg.active);
   const [names, setNames] = useState({ uk: pkg.nameUk, ru: pkg.nameRu, en: pkg.nameEn });
-  const [locationId, setLocationId] = useState(pkg.locationId);
+  const [locationIds, setLocationIds] = useState<string[]>(pkg.locationIds);
   const [wdStr, setWdStr] = useState(String(pkg.fixedPriceWeekday));
   const [weStr, setWeStr] = useState(String(pkg.fixedPriceWeekend));
   const [maxStr, setMaxStr] = useState(String(pkg.maxPeople));
@@ -1231,10 +1246,15 @@ function PackageCard({
     setTimeout(() => setSavedFlash(""), 1800);
   }
 
-  const locActs = activityOptions.filter((a) => a.locationIds.includes(locationId));
+  // розвага має бути доступна на КОЖНІЙ з обраних локацій комплексу
+  const availableEverywhere = (a: ActivityOption) =>
+    locationIds.every((locId) => a.locationIds.includes(locId));
+  const locActs = activityOptions.filter(availableEverywhere);
   const actById = (id: string) => activityOptions.find((a) => a.id === id);
-  // розваги, яких немає на обраній локації — підсвічуємо попередженням
-  const staleItems = items.filter((it) => !actById(it.activityId)?.locationIds.includes(locationId));
+  const staleItems = items.filter((it) => {
+    const a = actById(it.activityId);
+    return !a || !availableEverywhere(a);
+  });
 
   function move(i: number, dir: number) {
     setItems((arr) => {
@@ -1247,6 +1267,10 @@ function PackageCard({
   }
 
   async function save() {
+    if (!locationIds.length) {
+      alert("Оберіть хоча б одну локацію");
+      return;
+    }
     setBusy(true);
     try {
       const res = await fetch(`/api/crm/packages/${pkg.id}`, {
@@ -1257,7 +1281,7 @@ function PackageCard({
           nameUk: names.uk,
           nameRu: names.ru,
           nameEn: names.en,
-          locationId,
+          locationIds,
           maxPeople: Math.max(1, parseInt(maxStr, 10) || pkg.maxPeople),
           extraPersonFee: Math.max(0, parseInt(feeStr, 10) || 0),
           fixedPriceWeekday: Math.max(0, parseInt(wdStr, 10) || 0),
@@ -1303,7 +1327,10 @@ function PackageCard({
         <span className="text-2xl">{pkg.icon}</span>
         <span className="text-[16px] font-extrabold">{names.uk}</span>
         <span className="rounded-full bg-[#0e0e0e] px-2.5 py-1 text-[11px] text-[#888]">
-          {locations.find((l) => l.id === locationId)?.name ?? "—"}
+          {locationIds
+            .map((id) => locations.find((l) => l.id === id)?.name)
+            .filter(Boolean)
+            .join(" · ") || "—"}
         </span>
         <label className="ml-auto flex cursor-pointer items-center gap-2 text-[13px]">
           <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
@@ -1328,18 +1355,34 @@ function PackageCard({
         ))}
       </div>
 
-      {/* location + prices + people */}
-      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
-        <div>
-          <div className="mb-1 text-[11px] font-bold uppercase text-[#777]">Локація</div>
-          <select value={locationId} onChange={(e) => setLocationId(e.target.value)} className={inputCls}>
-            {locations.map((l) => (
-              <option key={l.id} value={l.id}>
+      {/* locations (multi) */}
+      <div className="mb-4">
+        <div className="mb-1.5 text-[11px] font-bold uppercase text-[#777]">Локації</div>
+        <div className="flex flex-wrap gap-2">
+          {locations.map((l) => {
+            const on = locationIds.includes(l.id);
+            return (
+              <button
+                key={l.id}
+                onClick={() =>
+                  setLocationIds((ids) => (on ? ids.filter((x) => x !== l.id) : [...ids, l.id]))
+                }
+                className="rounded-full px-3.5 py-1.5 text-[12px] font-semibold"
+                style={{
+                  background: on ? "#56EF02" : "#0e0e0e",
+                  color: on ? "#111" : "#bbb",
+                  border: `1px solid ${on ? "#56EF02" : "#333"}`,
+                }}
+              >
                 {l.name}
-              </option>
-            ))}
-          </select>
+              </button>
+            );
+          })}
         </div>
+      </div>
+
+      {/* prices + people */}
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         <div>
           <div className="mb-1 text-[11px] font-bold uppercase text-[#777]">Будні, грн</div>
           <input value={wdStr} onChange={(e) => setWdStr(e.target.value)} inputMode="numeric" className={`${inputCls} text-right`} />
@@ -1386,13 +1429,13 @@ function PackageCard({
         <div className="flex flex-col gap-2">
           {items.map((it, i) => {
             const a = actById(it.activityId);
-            const missing = !a?.locationIds.includes(locationId);
+            const missing = !a || !availableEverywhere(a);
             return (
               <div key={`${it.activityId}-${i}`} className="flex flex-wrap items-center gap-2 rounded-xl bg-[#0e0e0e] px-3 py-2">
                 <span className="w-6 text-center text-[12px] font-bold text-[#666]">{i + 1}.</span>
                 <span className={`flex-1 text-[13px] font-semibold ${missing ? "text-[#ff8a5c]" : ""}`}>
                   {a ? `${a.icon} ${a.name}` : "?"}
-                  {missing && " — немає на цій локації"}
+                  {missing && " — немає на одній з обраних локацій"}
                 </span>
                 <label className="flex items-center gap-1 text-[12px] text-[#999]">
                   <input
@@ -1441,7 +1484,8 @@ function PackageCard({
           )}
           {staleItems.length > 0 && (
             <div className="text-[11px] text-[#ff8a5c]">
-              Помаранчеві позиції не існують на обраній локації — приберіть їх або поверніть локацію.
+              Помаранчеві позиції недоступні на якійсь з обраних локацій — приберіть їх або змініть
+              локації.
             </div>
           )}
         </div>

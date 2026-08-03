@@ -17,7 +17,7 @@ const schema = z.object({
   nameUk: z.string().min(1).max(160).optional(),
   nameRu: z.string().max(160).optional(),
   nameEn: z.string().max(160).optional(),
-  locationId: z.string().min(1).optional(),
+  locationIds: z.array(z.string().min(1)).min(1).max(10).optional(),
   maxPeople: z.number().int().min(1).max(999).optional(),
   extraPersonFee: z.number().int().min(0).max(100_000).optional(),
   fixedPriceWeekday: z.number().int().min(0).max(1_000_000).optional(),
@@ -46,13 +46,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const before = await prisma.package.findUnique({
     where: { id: params.id },
-    include: { items: { orderBy: { order: "asc" }, include: { activity: true } }, location: true },
+    include: { items: { orderBy: { order: "asc" }, include: { activity: true } }, locations: true },
   });
   if (!before) return NextResponse.json({ error: "Не знайдено" }, { status: 404 });
 
-  if (d.locationId) {
-    const loc = await prisma.location.findUnique({ where: { id: d.locationId } });
-    if (!loc) return NextResponse.json({ error: "Локацію не знайдено" }, { status: 400 });
+  if (d.locationIds) {
+    const locs = await prisma.location.findMany({ where: { id: { in: d.locationIds } } });
+    if (locs.length !== d.locationIds.length) {
+      return NextResponse.json({ error: "Локацію не знайдено" }, { status: 400 });
+    }
   }
   if (d.items) {
     const ids = Array.from(new Set(d.items.map((i) => i.activityId)));
@@ -70,7 +72,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         nameUk: d.nameUk ?? undefined,
         nameRu: d.nameRu ?? undefined,
         nameEn: d.nameEn ?? undefined,
-        locationId: d.locationId ?? undefined,
         maxPeople: d.maxPeople ?? undefined,
         extraPersonFee: d.extraPersonFee ?? undefined,
         fixedPriceWeekday: d.fixedPriceWeekday ?? undefined,
@@ -80,6 +81,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         perksEn: d.perksEn ?? undefined,
       },
     });
+    if (d.locationIds) {
+      await tx.packageLocation.deleteMany({ where: { packageId: params.id } });
+      for (const locationId of d.locationIds) {
+        await tx.packageLocation.create({ data: { packageId: params.id, locationId } });
+      }
+    }
     if (d.items) {
       await tx.packageItem.deleteMany({ where: { packageId: params.id } });
       let order = 10;
@@ -111,8 +118,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     changes.push(`включено учасників: ${before.maxPeople} → ${d.maxPeople}`);
   if (d.extraPersonFee != null && d.extraPersonFee !== before.extraPersonFee)
     changes.push(`доплата за додаткового: ${before.extraPersonFee || "10%"} → ${d.extraPersonFee || "10%"}`);
-  if (d.locationId && d.locationId !== before.locationId)
-    changes.push("змінено локацію");
+  if (d.locationIds) {
+    const oldIds = before.locations.map((l) => l.locationId).sort().join(",");
+    if (oldIds !== [...d.locationIds].sort().join(",")) changes.push("змінено локації");
+  }
   if (d.items) {
     const oldList = before.items.map((i) => `${i.activity.nameUk} ${i.durationMin}хв`).join(", ");
     changes.push(`склад: [${oldList}] → ${d.items.length} позицій`);
