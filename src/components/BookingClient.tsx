@@ -836,11 +836,17 @@ export default function BookingClient({
           <Field n={4} label={dict.stepPhone}>
             <input
               type="tel"
+              name="phone"
+              // браузер сам пропонує збережений номер — заповнення одним тапом
+              autoComplete="tel"
+              inputMode="tel"
               placeholder={dict.phonePlaceholder}
               value={customerPhone}
               onChange={(e) => setPhone(e.target.value)}
               className="w-full rounded-xl border border-[#E5E5E5] px-3.5 py-3 text-[15px]"
             />
+            {/* прозора згода: номер може використовуватись для зв'язку */}
+            <p className="mb-0 mt-1.5 text-[11px] leading-snug text-[#a5a5a5]">{dict.phoneConsent}</p>
           </Field>
         </div>
 
@@ -1421,6 +1427,8 @@ export default function BookingClient({
 
                 <input
                   type="text"
+                  name="name"
+                  autoComplete="name"
                   placeholder={dict.namePlaceholder}
                   value={customerName}
                   onChange={(e) => setName(e.target.value)}
