@@ -373,15 +373,17 @@ export default function BookingClient({
     const ranges: [number, number][] = [];
     picks.forEach((p) => {
       const a = actById.get(p.activityId);
-      if (a) ranges.push([p.startMin, p.startMin + actDuration(a)]);
+      // кімнати (банкетна) навмисно паралельні — власний час вони не блокують
+      if (a && a.category !== "room") ranges.push([p.startMin, p.startMin + actDuration(a)]);
     });
     if (pkgBooking) {
       const p = catalog.packages.find((x) => x.id === pkgBooking.packageId);
       // та сама розстановка, з якою комплекс реально бронюється
       if (p)
-        (fitPackage(p, pkgBooking.startMin) ?? expandPackage(p, pkgBooking.startMin)).forEach((it) =>
-          ranges.push([it.startMin, it.startMin + it.durationMin])
-        );
+        (fitPackage(p, pkgBooking.startMin) ?? expandPackage(p, pkgBooking.startMin)).forEach((it) => {
+          if (actById.get(it.activityId)?.category !== "room")
+            ranges.push([it.startMin, it.startMin + it.durationMin]);
+        });
     }
     return ranges;
   }, [picks, actById, actDuration, pkgBooking, catalog.packages, fitPackage, expandPackage]);
@@ -399,9 +401,12 @@ export default function BookingClient({
         if (b.includes(m)) return "busy";
       }
       // block anything overlapping this customer's own bookings (all activities
-      // + package) — can't do two things at the same time
-      for (const [rs, re] of myBusyRanges) {
-        if (startMin < re && rs < end) return "busy";
+      // + package) — can't do two things at the same time. Банкетна кімната —
+      // виняток: вона йде паралельно зі святом (лазертаг 12–13, банкет 12–14).
+      if (a.category !== "room") {
+        for (const [rs, re] of myBusyRanges) {
+          if (startMin < re && rs < end) return "busy";
+        }
       }
       return "free";
     },

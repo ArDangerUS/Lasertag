@@ -58,13 +58,16 @@ export async function POST(req: NextRequest) {
   const movesMap = new Map(moves.map((m) => [m.itemId, m.startMin]));
   const affectedBookings = await prisma.booking.findMany({
     where: { id: { in: [...new Set(items.map((i) => i.bookingId))] } },
-    include: { items: true },
+    include: { items: { include: { activity: true } } },
   });
   for (const b of affectedBookings) {
-    const ivs = b.items.map((it) => {
-      const s = movesMap.get(it.id) ?? it.startMin;
-      return { title: it.title, s, e: s + it.durationMin };
-    });
+    // Кімнати (банкетна) навмисно йдуть паралельно зі святом — їх не рахуємо.
+    const ivs = b.items
+      .filter((it) => it.activity.category !== "room")
+      .map((it) => {
+        const s = movesMap.get(it.id) ?? it.startMin;
+        return { title: it.title, s, e: s + it.durationMin };
+      });
     for (let i = 0; i < ivs.length; i++) {
       for (let j = i + 1; j < ivs.length; j++) {
         if (ivs[i].s < ivs[j].e && ivs[j].s < ivs[i].e) {
