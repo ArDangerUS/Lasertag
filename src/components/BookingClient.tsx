@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import PhoneMenu from "./PhoneMenu";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import type { PublicCatalog, PubActivity } from "@/lib/public-catalog";
 import type { Dict } from "@/lib/i18n";
@@ -735,9 +736,21 @@ export default function BookingClient({
               >
                 <ViberGlyph />
               </a>
-              <a href={`tel:${phone}`} className="text-[12px] font-bold text-brand-ink sm:text-[14px]">
-                {phone}
-              </a>
+              {/* на телефоні тап відкриває вибір (дзвінок / контакти / копія),
+                  на компі — звичайний клік-дзвінок як раніше */}
+              <PhoneMenu
+                phone={phone}
+                contactName={dict.brandName}
+                variant="light"
+                desktopPlainCall
+                labels={{
+                  call: dict.phoneCall,
+                  add: dict.phoneAddContact,
+                  copy: dict.phoneCopy,
+                  copied: dict.phoneCopied,
+                }}
+                className="text-[12px] font-bold text-brand-ink sm:text-[14px]"
+              />
             </div>
           </div>
         </div>

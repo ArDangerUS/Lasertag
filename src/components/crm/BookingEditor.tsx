@@ -5,6 +5,7 @@ import type { CrmBooking, CrmCatalog } from "@/lib/crm-data";
 import { STATUS_META, BOOKING_STATUSES, type BookingStatus } from "@/lib/constants";
 import { fmtMoney, minToHHMM } from "@/lib/pricing";
 import Modal from "./Modal";
+import PhoneMenu from "@/components/PhoneMenu";
 
 type Comment = { id: string; authorName: string; text: string; createdAt: string };
 
@@ -190,7 +191,17 @@ export default function BookingEditor({
           </div>
           <div>
             <Label>Телефон</Label>
-            <Input value={phone} onChange={setPhone} disabled={!canWrite} />
+            <div className="flex items-center gap-2">
+              <Input value={phone} onChange={setPhone} disabled={!canWrite} />
+              {/* дзвінок / у контакти (vCard з ім'ям клієнта) / копіювати */}
+              <PhoneMenu
+                phone={phone}
+                contactName={name ? `${name} (G-75)` : "Клієнт G-75"}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0e0e0e] text-[16px] ring-1 ring-[#333] hover:ring-[#56EF02]"
+              >
+                📞
+              </PhoneMenu>
+            </div>
           </div>
           <div>
             <Label>Учасників</Label>

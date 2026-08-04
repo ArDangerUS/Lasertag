@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import PhoneMenu from "@/components/PhoneMenu";
 
 type Lead = {
   id: string;
@@ -79,9 +80,11 @@ export default function LeadsClient({
               <div className="flex flex-col gap-2">
                 {grp.list.map((l) => (
                   <div key={l.id} className="flex flex-wrap items-center gap-3 rounded-xl bg-[#0e0e0e] px-4 py-3">
-                    <a href={`tel:${l.phone}`} className="text-[15px] font-extrabold text-[#56EF02]">
-                      {l.phone}
-                    </a>
+                    <PhoneMenu
+                      phone={l.phone}
+                      contactName={l.name ? `${l.name} (G-75 лід)` : "Лід G-75"}
+                      className="text-[15px] font-extrabold text-[#56EF02]"
+                    />
                     {l.name && <span className="text-[13px] text-[#ddd]">{l.name}</span>}
                     <span className="text-[12px] text-[#888]">
                       {[l.locationName, l.date, l.people ? `${l.people} ос` : ""].filter(Boolean).join(" · ")}
