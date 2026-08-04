@@ -44,6 +44,9 @@ export default function BookingClient({
   const [date, setDate] = useState(today);
   const [locationId, setLocationId] = useState(locations[0]?.id ?? "");
   const [people, setPeople] = useState(10);
+  // Текстове відображення поля «Учасники»: можна повністю стерти під час
+  // вводу; порожнє поле при виході відновлюється до останнього значення.
+  const [peopleStr, setPeopleStr] = useState("10");
   const [customerPhone, setPhone] = useState("");
   // Ключ сесії для «лідів»: телефон зберігається в CRM, щойно введений,
   // навіть якщо бронювання не завершили. Один ключ = один запис (без дублів).
@@ -810,23 +813,38 @@ export default function BookingClient({
           <Field n={3} label={dict.stepPeople}>
             <div className="flex items-stretch gap-2">
               <button
-                onClick={() => setPeople((p) => Math.max(1, p - 1))}
+                onClick={() => {
+                  const next = Math.max(1, people - 1);
+                  setPeople(next);
+                  setPeopleStr(String(next));
+                }}
                 className="w-11 rounded-xl border border-[#E5E5E5] bg-white text-lg font-bold"
               >
                 −
               </button>
               <input
-                type="number"
-                min={1}
-                max={100}
-                value={people}
-                onChange={(e) =>
-                  setPeople(Math.min(100, Math.max(1, Number(e.target.value) || 1)))
-                }
+                type="text"
+                inputMode="numeric"
+                value={peopleStr}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/\D/g, "");
+                  setPeopleStr(raw);
+                  const n = parseInt(raw, 10);
+                  if (Number.isFinite(n) && n >= 1) setPeople(Math.min(100, n));
+                }}
+                onBlur={() => {
+                  const n = Math.min(100, Math.max(1, parseInt(peopleStr, 10) || people));
+                  setPeople(n);
+                  setPeopleStr(String(n));
+                }}
                 className="w-full rounded-xl border border-[#E5E5E5] px-3.5 py-3 text-center text-[15px]"
               />
               <button
-                onClick={() => setPeople((p) => Math.min(100, p + 1))}
+                onClick={() => {
+                  const next = Math.min(100, people + 1);
+                  setPeople(next);
+                  setPeopleStr(String(next));
+                }}
                 className="w-11 rounded-xl border border-[#E5E5E5] bg-white text-lg font-bold"
               >
                 +

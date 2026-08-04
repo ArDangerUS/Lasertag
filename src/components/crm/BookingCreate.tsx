@@ -21,6 +21,8 @@ export default function BookingCreate({
   const [date, setDate] = useState(initial.date);
   const [locationId, setLocationId] = useState(initial.locationId || catalog.locations[0]?.id || "");
   const [people, setPeople] = useState(10);
+  // рядок для поля: можна повністю стерти, на blur повертається значення
+  const [peopleStr, setPeopleStr] = useState("10");
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   // Коментар менеджера: після створення броні падає у стрічку коментарів
@@ -181,10 +183,20 @@ export default function BookingCreate({
           <div>
             <Label>Учасників</Label>
             <input
-              type="number"
-              min={1}
-              value={people}
-              onChange={(e) => setPeople(Math.max(1, Number(e.target.value) || 1))}
+              type="text"
+              inputMode="numeric"
+              value={peopleStr}
+              onChange={(e) => {
+                const raw = e.target.value.replace(/\D/g, "");
+                setPeopleStr(raw);
+                const n = parseInt(raw, 10);
+                if (Number.isFinite(n) && n >= 1) setPeople(n);
+              }}
+              onBlur={() => {
+                const n = Math.max(1, parseInt(peopleStr, 10) || people);
+                setPeople(n);
+                setPeopleStr(String(n));
+              }}
               className="w-full rounded-xl border border-[#333] bg-[#0e0e0e] px-3 py-2.5 text-[14px] text-white"
             />
           </div>

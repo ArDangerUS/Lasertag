@@ -28,6 +28,8 @@ export default function BookingEditor({
   const [name, setName] = useState(booking.customerName);
   const [phone, setPhone] = useState(booking.customerPhone);
   const [people, setPeople] = useState(booking.people);
+  // рядок для поля «Учасників»: можна повністю стерти, на blur відновлюється
+  const [peopleStr, setPeopleStr] = useState(String(booking.people));
   const [prepaid, setPrepaid] = useState(booking.prepaidAmount);
   const [itemPrices, setItemPrices] = useState<Record<string, number>>(
     Object.fromEntries(booking.items.map((i) => [i.id, i.price]))
@@ -205,11 +207,23 @@ export default function BookingEditor({
           </div>
           <div>
             <Label>Учасників</Label>
-            <Input
-              type="number"
-              value={String(people)}
-              onChange={(v) => setPeople(Math.max(1, Number(v) || 1))}
+            <input
+              type="text"
+              inputMode="numeric"
+              value={peopleStr}
               disabled={!canWrite}
+              onChange={(e) => {
+                const raw = e.target.value.replace(/\D/g, "");
+                setPeopleStr(raw);
+                const n = parseInt(raw, 10);
+                if (Number.isFinite(n) && n >= 1) setPeople(n);
+              }}
+              onBlur={() => {
+                const n = Math.max(1, parseInt(peopleStr, 10) || people);
+                setPeople(n);
+                setPeopleStr(String(n));
+              }}
+              className="w-full rounded-xl border border-[#333] bg-[#0e0e0e] px-3 py-2.5 text-[14px] text-white disabled:opacity-60"
             />
           </div>
           <div>
