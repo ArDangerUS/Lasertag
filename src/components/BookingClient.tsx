@@ -81,6 +81,26 @@ export default function BookingClient({
 
   const location = locations.find((l) => l.id === locationId) ?? locations[0];
 
+  // Якщо сторінку вбудовано в iframe (WordPress-сторінка /book) — повідомляємо
+  // батьківському вікну реальну висоту, щоб не було подвійного скролу.
+  useEffect(() => {
+    if (typeof window === "undefined" || window.parent === window) return;
+    const send = () => {
+      window.parent.postMessage(
+        { type: "g75-embed-height", height: document.documentElement.scrollHeight },
+        "*"
+      );
+    };
+    send();
+    const ro = new ResizeObserver(send);
+    ro.observe(document.documentElement);
+    const t = setInterval(send, 1500); // страховка на випадок пропущених змін
+    return () => {
+      ro.disconnect();
+      clearInterval(t);
+    };
+  }, []);
+
   // Тихе збереження ліда: щойно у телефоні достатньо цифр — надсилаємо в CRM
   // (з дебаунсом, щоб не смикати сервер на кожну клавішу).
   const lastLeadPayload = useRef("");
