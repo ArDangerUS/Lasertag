@@ -195,25 +195,8 @@ async function main() {
       role: "ADMIN",
     },
   });
-  const manager = await prisma.user.create({
-    data: {
-      id: "user-manager",
-      email: "manager@g75.local",
-      name: "Менеджер Оля",
-      passwordHash: await bcrypt.hash("manager12345", 10),
-      role: "MANAGER",
-    },
-  });
-  await prisma.user.create({
-    data: {
-      id: "user-viewer",
-      email: "viewer@g75.local",
-      name: "Перегляд",
-      passwordHash: await bcrypt.hash("viewer12345", 10),
-      role: "VIEWER",
-    },
-  });
-  console.log(`  3 users (admin: ${adminEmail} / ${adminPass})`);
+  // Менеджерів/переглядачів адміністратор створює сам у вкладці «Користувачі».
+  console.log(`  1 user (admin: ${adminEmail} / ${adminPass})`);
 
   // ---- demo bookings (current week) so the CRM calendar isn't empty ----
   // SEED_DEMO=false — бойовий режим: каталог сідиться, демо-броні ні.
@@ -313,7 +296,7 @@ async function main() {
           people,
           totalPrice: price,
           prepaidAmount: status === "PREPAID" ? 1000 : 0,
-          createdById: rand() > 0.5 ? admin.id : manager.id,
+          createdById: admin.id,
           items: {
             create: [
               {
