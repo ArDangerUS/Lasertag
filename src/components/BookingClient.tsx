@@ -795,7 +795,7 @@ export default function BookingClient({
       </header>
       )}
 
-      {/* Плаваюча кнопка Telegram — тільки на телефонах; в embed-режимі
+      {/* Плаваюча кнопка Telegram — на всіх екранах; в embed-режимі
           прихована (на сайті-обгортці свої контакти/віджети) */}
       {!embed && (
         <a
@@ -803,7 +803,7 @@ export default function BookingClient({
           target="_blank"
           rel="noreferrer"
           aria-label="Telegram"
-          className="fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#229ED9] text-white shadow-[0_6px_20px_rgba(34,158,217,0.45)] transition active:scale-95 md:hidden"
+          className="fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#229ED9] text-white shadow-[0_6px_20px_rgba(34,158,217,0.45)] transition hover:scale-105 active:scale-95"
           style={{ bottom: "calc(20px + env(safe-area-inset-bottom))" }}
         >
           <svg
