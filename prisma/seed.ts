@@ -216,6 +216,12 @@ async function main() {
   console.log(`  3 users (admin: ${adminEmail} / ${adminPass})`);
 
   // ---- demo bookings (current week) so the CRM calendar isn't empty ----
+  // SEED_DEMO=false — бойовий режим: каталог сідиться, демо-броні ні.
+  if (process.env.SEED_DEMO === "false") {
+    console.log("  demo bookings skipped (SEED_DEMO=false)");
+    console.log("Done.");
+    return;
+  }
   // Deterministic PRNG (Date.now not available in seed on some runners anyway).
   let s = 20260711;
   const rand = () => {

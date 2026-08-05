@@ -4,15 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "node scripts/db-provider.js && prisma generate && next build",
     "start": "next start",
-    "start:heroku": "prisma db push --accept-data-loss && tsx prisma/ensure-seed.ts && next start",
+    "start:heroku": "node scripts/db-provider.js && prisma db push --accept-data-loss && tsx prisma/ensure-seed.ts && next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "node scripts/db-provider.js && prisma generate"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

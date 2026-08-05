@@ -26,6 +26,8 @@ type Props = {
   phone: string;
   viberUrl: string;
   telegramUrl: string;
+  // true = сторінка в iframe на WordPress: шапка і плаваючий TG приховані
+  embed?: boolean;
 };
 
 const G = "#56EF02";
@@ -39,6 +41,7 @@ export default function BookingClient({
   phone,
   viberUrl,
   telegramUrl,
+  embed = false,
 }: Props) {
   const locations = catalog.locations;
   const [date, setDate] = useState(today);
@@ -730,6 +733,13 @@ export default function BookingClient({
   return (
     <div style={{ minHeight: "100vh", background: "#f2f2f2" }}>
       {/* Header (sticky, like the main site; compact on phones) */}
+      {embed ? (
+        // embed-режим (iframe на WordPress): шапка сайту вже є в обгортки —
+        // лишаємо тільки компактний перемикач мови
+        <div className="flex justify-end px-4 pt-3 md:px-10">
+          <LangDropdown locale={locale} embed />
+        </div>
+      ) : (
       <header className="sticky top-0 z-50 flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-[#e8e8e8] bg-white px-4 py-2 sm:gap-x-6 sm:py-3 md:px-10">
         {/* LEFT: logo (→ start screen) + brand name, contacts underneath */}
         <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
@@ -783,27 +793,31 @@ export default function BookingClient({
           <LangDropdown locale={locale} />
         </div>
       </header>
+      )}
 
-      {/* Плаваюча кнопка Telegram — тільки на телефонах, завжди поверх сторінки */}
-      <a
-        href="https://t.me/Lasertag_G75"
-        target="_blank"
-        rel="noreferrer"
-        aria-label="Telegram"
-        className="fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#229ED9] text-white shadow-[0_6px_20px_rgba(34,158,217,0.45)] transition active:scale-95 md:hidden"
-        style={{ bottom: "calc(20px + env(safe-area-inset-bottom))" }}
-      >
-        <svg
-          width="26"
-          height="26"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          aria-hidden="true"
-          style={{ marginLeft: -2, marginTop: 2 }}
+      {/* Плаваюча кнопка Telegram — тільки на телефонах; в embed-режимі
+          прихована (на сайті-обгортці свої контакти/віджети) */}
+      {!embed && (
+        <a
+          href="https://t.me/Lasertag_G75"
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Telegram"
+          className="fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#229ED9] text-white shadow-[0_6px_20px_rgba(34,158,217,0.45)] transition active:scale-95 md:hidden"
+          style={{ bottom: "calc(20px + env(safe-area-inset-bottom))" }}
         >
-          <path d="M23.91 3.79 20.3 20.84c-.25 1.21-.98 1.5-2 .94l-5.5-4.07-2.66 2.57c-.3.3-.55.56-1.1.56-.72 0-.6-.27-.84-.95L6.3 13.7l-5.45-1.7c-1.18-.35-1.19-1.16.26-1.75l21.26-8.2c.97-.43 1.9.24 1.53 1.73Z" />
-        </svg>
-      </a>
+          <svg
+            width="26"
+            height="26"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"
+            style={{ marginLeft: -2, marginTop: 2 }}
+          >
+            <path d="M23.91 3.79 20.3 20.84c-.25 1.21-.98 1.5-2 .94l-5.5-4.07-2.66 2.57c-.3.3-.55.56-1.1.56-.72 0-.6-.27-.84-.95L6.3 13.7l-5.45-1.7c-1.18-.35-1.19-1.16.26-1.75l21.26-8.2c.97-.43 1.9.24 1.53 1.73Z" />
+          </svg>
+        </a>
+      )}
 
       <div className="mx-auto max-w-[1280px] px-5 pb-16 pt-8 md:px-10">
         {/* Title */}
@@ -1853,10 +1867,12 @@ function DatePicker({
   );
 }
 
-function LangDropdown({ locale }: { locale: Locale }) {
+function LangDropdown({ locale, embed = false }: { locale: Locale; embed?: boolean }) {
   const [open, setOpen] = useState(false);
   const all: Locale[] = ["uk", "ru", "en"];
   const others = all.filter((l) => l !== locale);
+  // в embed-режимі перемикання мови не має губити ?embed=1
+  const hrefFor = (l: Locale) => `/?lang=${l}${embed ? "&embed=1" : ""}`;
   useEffect(() => {
     if (!open) return;
     const close = () => setOpen(false);
@@ -1878,7 +1894,7 @@ function LangDropdown({ locale }: { locale: Locale }) {
           {others.map((l) => (
             <a
               key={l}
-              href={`/?lang=${l}`}
+              href={hrefFor(l)}
               className="block px-3 py-1.5 text-[14px] font-semibold text-brand-ink hover:bg-[#f4f4f4]"
             >
               {l.toUpperCase()}

@@ -15,9 +15,12 @@ function todayISO(): string {
 export default async function BookingPage({
   searchParams,
 }: {
-  searchParams: { lang?: string };
+  searchParams: { lang?: string; embed?: string };
 }) {
   const langParam = (searchParams.lang || "").toLowerCase();
+  // ?embed=1 — сторінку вбудовано в iframe на WordPress: свою шапку і
+  // плаваючий Telegram ховаємо (вони вже є на сайті-обгортці)
+  const embed = searchParams.embed === "1";
   const locale: Locale = (LOCALES as readonly string[]).includes(langParam)
     ? (langParam as Locale)
     : DEFAULT_LOCALE;
@@ -34,6 +37,7 @@ export default async function BookingPage({
       phone={process.env.NEXT_PUBLIC_PHONE || "+380963940288"}
       viberUrl={process.env.NEXT_PUBLIC_VIBER_URL || "viber://chat?number=%2B380963940288"}
       telegramUrl={process.env.NEXT_PUBLIC_TELEGRAM_URL || "https://t.me/g75lasertag_bot"}
+      embed={embed}
     />
   );
 }
