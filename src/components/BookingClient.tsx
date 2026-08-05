@@ -32,6 +32,10 @@ type Props = {
 
 const G = "#56EF02";
 const PERK_LIMIT = 6; // perks shown before "показати все"
+// Плаваюча Telegram-кнопка вимкнена: на WordPress-сторінці /book працює
+// чат-віджет клієнтів, друга кнопка в тому ж куті зайва. Щоб повернути
+// нашу — поставте true.
+const SHOW_TG_FAB = false;
 
 export default function BookingClient({
   catalog,
@@ -797,7 +801,7 @@ export default function BookingClient({
 
       {/* Плаваюча кнопка Telegram — на всіх екранах; в embed-режимі
           прихована (на сайті-обгортці свої контакти/віджети) */}
-      {!embed && (
+      {SHOW_TG_FAB && !embed && (
         <a
           href="https://t.me/Lasertag_G75"
           target="_blank"
