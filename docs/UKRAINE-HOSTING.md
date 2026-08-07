@@ -50,6 +50,8 @@ npm install
 ```
 DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DBNAME"
 AUTH_SECRET="довгий випадковий рядок 40+ символів"
+# зовнішня адреса сайту — щоб редиректи CRM вели на домен, а не на localhost
+PUBLIC_ORIGIN="https://book.lasertag.in.ua"
 SEED_DEMO="false"
 SEED_ADMIN_EMAIL="admin@g75.local"
 SEED_ADMIN_PASSWORD="свій-надійний-пароль"
