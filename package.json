@@ -7,6 +7,7 @@
     "build": "node scripts/db-provider.js && prisma generate && next build",
     "start": "next start",
     "start:heroku": "node scripts/db-provider.js && prisma db push --accept-data-loss && tsx prisma/ensure-seed.ts && next start",
+    "start:ukraine": "node scripts/db-provider.js && prisma db push --accept-data-loss && tsx prisma/ensure-seed.ts && next start -H ${HOST:-0.0.0.0} -p ${PORT:-3000}",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "db:push": "prisma db push",
