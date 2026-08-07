@@ -1,0 +1,35 @@
+name: Build for hosting
+
+# Запасний шлях, якщо збірка на shared-хостингу впирається в ліміти:
+# GitHub збирає застосунок і кладе готову теку .next у гілку "prebuilt".
+# На сервері тоді достатньо:
+#   git fetch origin prebuilt && git checkout prebuilt -- .next
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          DATABASE_URL: "file:./build.db"
+      - run: npm run build
+        env:
+          DATABASE_URL: "file:./build.db"
+      - name: Push .next to prebuilt branch
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git checkout --orphan prebuilt
+          git rm -rf --cached . >/dev/null
+          git add -f .next
+          git commit -m "prebuilt .next from ${GITHUB_SHA::7}"
+          git push -f origin prebuilt

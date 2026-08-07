@@ -6,6 +6,12 @@ const nextConfig = {
       { protocol: "https", hostname: "www.lasertag.in.ua" },
     ],
   },
+  experimental: {
+    // Shared-хостинг обмежує кількість процесів/потоків: збірка в один
+    // потік замість "по ядру на кожного" (інакше OS can't spawn worker thread)
+    cpus: 1,
+    workerThreads: false,
+  },
   async headers() {
     return [
       {
