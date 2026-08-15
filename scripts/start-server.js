@@ -1,8 +1,13 @@
-// Запуск Next з коректними host/port.
+// Запуск Next з коректними host/port, У ЦЬОМУ Ж ПРОЦЕСІ.
+//
 // Панелі хостингів передають HOST по-різному: "127.1.9.209", "0.0.0.0",
 // а Хостинг Україна — повним URL "http://127.1.9.209:3000". Next очікує
 // лише адресу, інакше падає з ENOTFOUND. Тут значення нормалізується.
-const { spawn } = require("child_process");
+//
+// Важливо: Next запускається через require, а не окремим процесом. Якщо
+// породжувати дочірній процес, Supervisor при перезапуску вбиває тільки
+// батька — Next лишається «сиротою», тримає порт, і кожен наступний старт
+// падає з EADDRINUSE.
 
 function cleanHost(raw) {
   if (!raw) return "0.0.0.0";
@@ -23,13 +28,22 @@ function cleanPort(raw, fallbackFromHost) {
   return "3000";
 }
 
+// Сторож: якщо Supervisor убʼє батьківський процес, наш Next лишиться
+// «сиротою» і триматиме порт — наступний старт впаде з EADDRINUSE.
+// Помітивши зміну батька (ppid стає 1), завершуємось самі.
+const parentPid = process.ppid;
+setInterval(() => {
+  if (process.ppid !== parentPid) {
+    console.log("Parent process is gone - shutting down to free the port");
+    process.exit(0);
+  }
+}, 3000).unref();
+
 const host = cleanHost(process.env.HOST);
 const port = cleanPort(process.env.PORT, process.env.HOST);
 console.log(`Starting Next on ${host}:${port}`);
 
+// Next CLI читає process.argv — підміняємо і віддаємо йому керування.
 const nextBin = require.resolve("next/dist/bin/next");
-const child = spawn(process.execPath, [nextBin, "start", "-H", host, "-p", port], {
-  stdio: "inherit",
-  env: process.env,
-});
-child.on("exit", (code) => process.exit(code ?? 0));
+process.argv = [process.argv[0], nextBin, "start", "-H", host, "-p", port];
+require(nextBin);
