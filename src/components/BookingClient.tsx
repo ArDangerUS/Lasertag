@@ -33,10 +33,12 @@ type Props = {
 
 const G = "#56EF02";
 const PERK_LIMIT = 6; // perks shown before "показати все"
-// Плаваюча Telegram-кнопка вимкнена: на WordPress-сторінці /book працює
-// чат-віджет клієнтів, друга кнопка в тому ж куті зайва. Щоб повернути
-// нашу — поставте true.
-const SHOW_TG_FAB = false;
+// Плаваюча Telegram-кнопка — лише для прямих заходів на book.lasertag.in.ua.
+// В embed-режимі (iframe на WordPress) вона не вмикається: висота iframe
+// дорівнює висоті всього вмісту, тому position:fixed «прилипає» не до екрана,
+// а до низу сторінки і кнопка не плаває. Для сторінки /book таку кнопку
+// додаємо на боці WordPress — див. docs/WORDPRESS.md.
+const SHOW_TG_FAB = true;
 
 export default function BookingClient({
   catalog,

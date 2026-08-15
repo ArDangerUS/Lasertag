@@ -1,0 +1,117 @@
+# Інтеграція з WordPress (lasertag.in.ua)
+
+Сторінка бронювання вбудована в основний сайт як iframe:
+`https://lasertag.in.ua/book` → `https://book.lasertag.in.ua/?embed=1`.
+
+## 1. Сніпет сторінки /book (iframe + автовисота + мова)
+
+Блок «HTML» в Elementor на сторінці /book:
+
+```html
+<div id="g75-book-wrap">
+  <iframe id="g75-book" src="https://book.lasertag.in.ua/?embed=1"
+          style="width:100%;border:0;display:block;min-height:900px"
+          title="Бронювання G-75" loading="lazy"></iframe>
+</div>
+<script>
+(function () {
+  var f = document.getElementById('g75-book');
+
+  // мова сторінки WordPress → мова форми бронювання
+  var lang = (document.documentElement.lang || 'uk').slice(0, 2).toLowerCase();
+  if (['uk', 'ru', 'en'].indexOf(lang) === -1) lang = 'uk';
+  f.src = 'https://book.lasertag.in.ua/?embed=1&lang=' + lang;
+
+  // висота: сторінка бронювання сама повідомляє свій розмір
+  window.addEventListener('message', function (e) {
+    if (e.origin !== 'https://book.lasertag.in.ua') return;
+    if (!e.data || e.data.type !== 'g75-embed-height') return;
+    f.style.height = e.data.height + 'px';
+  });
+})();
+</script>
+```
+
+Важливо: у `<iframe>` **не має бути атрибута `sandbox`** — інакше посилання
+«← На основний сайт» усередині форми не зможе вийти з iframe.
+
+## 2. Плаваючі кнопки саме на сторінці /book
+
+На решті сайту працює плагін клієнта **Floating Contact Button for MAX and
+Telegram**. Ми його не чіпаємо — це рішення клієнта. Але на сторінці
+бронювання він зайвий: там має бути тільки наша Telegram-кнопка.
+
+Плаваюча кнопка не може жити всередині iframe: висота iframe дорівнює
+висоті всього вмісту, тому `position: fixed` прив'язується не до екрана.
+Тому кнопку малюємо на боці WordPress.
+
+**Консоль → Snippets → Add New**, тип **PHP**, режим **Run everywhere**,
+вставити і зберегти з активацією:
+
+```php
+add_action( 'wp_footer', function () {
+	// тільки сторінка бронювання (і її переклади: /book, /en/book, /ru/book)
+	$path = trim( (string) parse_url( $_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH ), '/' );
+	if ( substr( $path, -4 ) !== 'book' ) {
+		return;
+	}
+	?>
+	<style>
+		/* сховати чужий плаваючий віджет ЛИШЕ на цій сторінці */
+		body [class*="floating-contact"],
+		body [id*="floating-contact"],
+		body [class^="fcb"],
+		body [id^="fcb"] { display: none !important; }
+
+		/* наша Telegram-кнопка */
+		.g75-tg-fab {
+			position: fixed;
+			right: 16px;
+			bottom: calc(20px + env(safe-area-inset-bottom));
+			z-index: 9999;
+			width: 56px;
+			height: 56px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			border-radius: 50%;
+			background: #229ED9;
+			color: #fff;
+			box-shadow: 0 6px 20px rgba(34, 158, 217, .45);
+			transition: transform .15s ease;
+		}
+		.g75-tg-fab:hover { transform: scale(1.05); }
+		.g75-tg-fab:active { transform: scale(.95); }
+		.g75-tg-fab svg { width: 26px; height: 26px; margin: 2px 0 0 -2px; }
+	</style>
+
+	<a class="g75-tg-fab" href="https://t.me/Lasertag_G75" target="_blank"
+	   rel="noopener" aria-label="Telegram">
+		<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23.91 3.79 20.3 20.84c-.25 1.21-.98 1.5-2 .94l-5.5-4.07-2.66 2.57c-.3.3-.55.56-1.1.56-.72 0-.6-.27-.84-.95L6.3 13.7l-5.45-1.7c-1.18-.35-1.19-1.16.26-1.75l21.26-8.2c.97-.43 1.9.24 1.53 1.73ZM7.03 13.16l11.85-7.29c.52-.32 1-.15.61.2l-9.86 8.9-.34 3.64-2.26-5.45Z"/></svg>
+	</a>
+	<?php
+}, 100 );
+```
+
+Плагін клієнта на всіх інших сторінках продовжує працювати як раніше.
+
+### Якщо чужа кнопка не сховалась
+
+Селектори в стилі вище — за найпоширенішими префіксами класів цього
+плагіна. Якщо кнопка лишилась:
+
+1. На сторінці /book правий клік по ній → **Перевірити (Inspect)**.
+2. У панелі коду піднятись до найзовнішнього `<div>` кнопки й скопіювати
+   його `class` або `id`.
+3. Дописати його в блок `<style>` окремим рядком:
+   `body .СКОПІЙОВАНИЙ-КЛАС { display: none !important; }`
+
+### Кеш
+
+На сайті активний **LiteSpeed Cache**. Після кожної зміни сніпета —
+**LiteSpeed Cache → Toolbox → Purge All**, інакше зміни не буде видно.
+
+## 3. Кнопка «Забронювати» в шапці
+
+**Elementor → Шаблони → Theme Builder → Header** → у рядок із меню додати
+віджет «Кнопка», текст «Забронювати», посилання `/book`.
