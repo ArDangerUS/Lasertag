@@ -41,9 +41,44 @@ setInterval(() => {
 
 const host = cleanHost(process.env.HOST);
 const port = cleanPort(process.env.PORT, process.env.HOST);
+
+// Самолікування: якщо порт тримає наш же старий процес (напр. «сирота» від
+// попередньої версії), прибираємо його і пробуємо ще раз. Інакше Supervisor
+// крутив би нескінченний цикл EADDRINUSE.
+function portBusy(h, p) {
+  const net = require("net");
+  return new Promise((resolve) => {
+    const srv = net
+      .createServer()
+      .once("error", (e) => resolve(e.code === "EADDRINUSE"))
+      .once("listening", () => srv.close(() => resolve(false)))
+      .listen(Number(p), h === "0.0.0.0" ? undefined : h);
+  });
+}
+
+async function ensurePortFree(h, p) {
+  if (!(await portBusy(h, p))) return;
+  console.log(`Port ${p} is busy - clearing stale server process`);
+  try {
+    // pkill не вбиває сам себе; наш процес зараз ще "node scripts/start-server.js"
+    require("child_process").execSync("pkill -f 'next-server' || true", { stdio: "ignore" });
+  } catch {
+    /* нічого не знайшли — не критично */
+  }
+  for (let i = 0; i < 10; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    if (!(await portBusy(h, p))) return;
+  }
+  console.warn(`Port ${p} is still busy - starting anyway`);
+}
+
+ensurePortFree(host, port).then(start);
+
+function start() {
 console.log(`Starting Next on ${host}:${port}`);
 
 // Next CLI читає process.argv — підміняємо і віддаємо йому керування.
 const nextBin = require.resolve("next/dist/bin/next");
 process.argv = [process.argv[0], nextBin, "start", "-H", host, "-p", port];
 require(nextBin);
+}
