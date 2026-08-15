@@ -741,16 +741,28 @@ export default function BookingClient({
       {/* Header (sticky, like the main site; compact on phones) */}
       {embed ? (
         // embed-режим (iframe на WordPress): шапка сайту вже є в обгортки —
-        // лишаємо тільки компактний перемикач мови
-        <div className="flex justify-end px-4 pt-3 md:px-10">
-          <LangDropdown locale={locale} embed />
+        // лишаємо компактне посилання «на основний сайт» і перемикач мови.
+        // target="_top" обовʼязково: інакше основний сайт відкриється
+        // всередині iframe.
+        <div className="flex items-center gap-3 px-4 pt-3 md:px-10">
+          <a
+            href={homeUrl}
+            target="_top"
+            className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-brand-green transition hover:opacity-80 sm:text-[14px]"
+          >
+            <span aria-hidden="true">←</span>
+            {dict.backToSite}
+          </a>
+          <div className="ml-auto">
+            <LangDropdown locale={locale} embed />
+          </div>
         </div>
       ) : (
       <header className="sticky top-0 z-50 flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-[#e8e8e8] bg-white px-4 py-2 sm:gap-x-6 sm:py-3 md:px-10">
         {/* LEFT: logo (→ start screen) + brand name, contacts underneath */}
         <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
           {/* логотип веде на основний сайт (або на початок бронювання) */}
-          <a href={homeUrl} aria-label={dict.brandName} className="shrink-0">
+          <a href={homeUrl} target="_top" aria-label={dict.brandName} className="shrink-0">
             <BrandLogo />
           </a>
           <div className="min-w-0 leading-tight">
