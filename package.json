@@ -9,7 +9,7 @@
     "start": "node scripts/db-provider.js && prisma db push --accept-data-loss && tsx prisma/ensure-seed.ts && exec node scripts/start-server.js",
     "start:plain": "next start",
     "start:heroku": "node scripts/db-provider.js && prisma db push --accept-data-loss && tsx prisma/ensure-seed.ts && next start",
-    "start:ukraine": "npm start",
+    "start:ukraine": "node scripts/db-provider.js && prisma db push --accept-data-loss && tsx prisma/ensure-seed.ts && exec node scripts/start-server.js",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "db:push": "prisma db push",

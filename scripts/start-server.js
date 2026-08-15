@@ -42,9 +42,11 @@ setInterval(() => {
 const host = cleanHost(process.env.HOST);
 const port = cleanPort(process.env.PORT, process.env.HOST);
 
-// Самолікування: якщо порт тримає наш же старий процес (напр. «сирота» від
-// попередньої версії), прибираємо його і пробуємо ще раз. Інакше Supervisor
-// крутив би нескінченний цикл EADDRINUSE.
+// Якщо порт зайнятий — розбираємось, ким саме:
+//  • там живий здоровий сервер → цей екземпляр зайвий, тихо виходимо
+//    (інакше два екземпляри вбивали б один одного по колу, а Supervisor
+//     піднімав би все нові);
+//  • там мертвий/завислий процес → прибираємо його і стартуємо самі.
 function portBusy(h, p) {
   const net = require("net");
   return new Promise((resolve) => {
@@ -56,23 +58,51 @@ function portBusy(h, p) {
   });
 }
 
+function serverAlive(h, p) {
+  const http = require("http");
+  const target = h === "0.0.0.0" ? "127.0.0.1" : h;
+  return new Promise((resolve) => {
+    const req = http.get({ host: target, port: Number(p), path: "/", timeout: 3000 }, (res) => {
+      res.resume();
+      resolve(true);
+    });
+    req.on("error", () => resolve(false));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
+}
+
 async function ensurePortFree(h, p) {
-  if (!(await portBusy(h, p))) return;
-  console.log(`Port ${p} is busy - clearing stale server process`);
+  if (!(await portBusy(h, p))) return true;
+
+  if (await serverAlive(h, p)) {
+    console.log(
+      `Port ${p} already serves a healthy instance - nothing to do, exiting.\n` +
+        "Щоб застосувати оновлення: зупиніть застосунок у панелі (або " +
+        "pkill -f next-server) і запустіть знову."
+    );
+    return false;
+  }
+
+  console.log(`Port ${p} is held by a dead process - clearing it`);
   try {
-    // pkill не вбиває сам себе; наш процес зараз ще "node scripts/start-server.js"
     require("child_process").execSync("pkill -f 'next-server' || true", { stdio: "ignore" });
   } catch {
     /* нічого не знайшли — не критично */
   }
   for (let i = 0; i < 10; i++) {
     await new Promise((r) => setTimeout(r, 1000));
-    if (!(await portBusy(h, p))) return;
+    if (!(await portBusy(h, p))) return true;
   }
-  console.warn(`Port ${p} is still busy - starting anyway`);
+  console.error(`Port ${p} is still busy - giving up, supervisor will retry`);
+  process.exit(1);
 }
 
-ensurePortFree(host, port).then(start);
+ensurePortFree(host, port).then((free) => {
+  if (free) start();
+});
 
 function start() {
 console.log(`Starting Next on ${host}:${port}`);
