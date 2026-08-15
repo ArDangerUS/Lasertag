@@ -33,10 +33,12 @@ type Props = {
 
 const G = "#56EF02";
 const PERK_LIMIT = 6; // perks shown before "показати все"
-// Плаваюча Telegram-кнопка вимкнена: на WordPress-сторінці /book працює
-// чат-віджет клієнтів, друга кнопка в тому ж куті зайва. Щоб повернути
-// нашу — поставте true.
-const SHOW_TG_FAB = false;
+// Чат клубу в Telegram (не бот для підтверджень — той у NEXT_PUBLIC_TELEGRAM_URL)
+const TG_CHAT_URL = "https://t.me/Lasertag_G75";
+// Спільний вигляд плаваючих кнопок (телефон / Telegram)
+const FAB_CLS =
+  "fixed z-40 flex h-14 w-14 items-center justify-center rounded-full text-white transition hover:scale-105 active:scale-95";
+const FAB_STYLE = { bottom: "calc(20px + env(safe-area-inset-bottom))" } as const;
 
 export default function BookingClient({
   catalog,
@@ -740,9 +742,19 @@ export default function BookingClient({
     <div style={{ minHeight: "100vh", background: "#f2f2f2" }}>
       {/* Header (sticky, like the main site; compact on phones) */}
       {embed ? (
-        // embed-режим (iframe на WordPress): шапка сайту вже є в обгортки —
-        // лишаємо тільки компактний перемикач мови
-        <div className="flex justify-end px-4 pt-3 md:px-10">
+        // embed-режим (iframe на WordPress): повна шапка сайту вже є в
+        // обгортки — лишаємо тільки повернення на сайт і перемикач мови
+        <div className="flex items-center justify-between gap-3 px-4 pt-3 md:px-10">
+          <a
+            href={homeUrl}
+            // _top, а не _self: усередині iframe звичайний перехід замінив би
+            // лише вміст рамки, і користувач лишився б на /book
+            target="_top"
+            className="flex items-center gap-2 text-[13px] font-bold text-brand-green transition hover:opacity-80"
+          >
+            <BrandLogo compact />
+            <span className="whitespace-nowrap">← {dict.backToSite}</span>
+          </a>
           <LangDropdown locale={locale} embed />
         </div>
       ) : (
@@ -750,7 +762,7 @@ export default function BookingClient({
         {/* LEFT: logo (→ start screen) + brand name, contacts underneath */}
         <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
           {/* логотип веде на основний сайт (або на початок бронювання) */}
-          <a href={homeUrl} aria-label={dict.brandName} className="shrink-0">
+          <a href={homeUrl} target="_top" aria-label={dict.brandName} className="shrink-0">
             <BrandLogo />
           </a>
           <div className="min-w-0 leading-tight">
@@ -759,7 +771,7 @@ export default function BookingClient({
             </div>
             <div className="mt-1 flex items-center gap-1.5 sm:gap-2">
               <a
-                href="https://t.me/Lasertag_G75"
+                href={TG_CHAT_URL}
                 target="_blank"
                 rel="noreferrer"
                 aria-label="Telegram"
@@ -802,28 +814,44 @@ export default function BookingClient({
       </header>
       )}
 
-      {/* Плаваюча кнопка Telegram — на всіх екранах; в embed-режимі
-          прихована (на сайті-обгортці свої контакти/віджети) */}
-      {SHOW_TG_FAB && !embed && (
-        <a
-          href="https://t.me/Lasertag_G75"
-          target="_blank"
-          rel="noreferrer"
-          aria-label="Telegram"
-          className="fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#229ED9] text-white shadow-[0_6px_20px_rgba(34,158,217,0.45)] transition hover:scale-105 active:scale-95"
-          style={{ bottom: "calc(20px + env(safe-area-inset-bottom))" }}
-        >
-          <svg
-            width="26"
-            height="26"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            aria-hidden="true"
-            style={{ marginLeft: -2, marginTop: 2 }}
+      {/* Плаваючі кнопки: телефон ліворуч, Telegram праворуч.
+          В embed-режимі не малюємо — їх дає сторінка-обгортка WordPress.
+          (position: fixed усередині iframe рахується від рамки, а не від
+          екрана, тож кнопка «прилипла» б до кінця вбудованого вмісту.) */}
+      {!embed && (
+        <>
+          <a
+            href={`tel:${phone}`}
+            aria-label={dict.phoneCall}
+            title={dict.phoneCall}
+            className={`${FAB_CLS} left-4 bg-brand-green shadow-[0_6px_20px_rgba(19,150,0,0.45)]`}
+            style={FAB_STYLE}
           >
-            <path d="M23.91 3.79 20.3 20.84c-.25 1.21-.98 1.5-2 .94l-5.5-4.07-2.66 2.57c-.3.3-.55.56-1.1.56-.72 0-.6-.27-.84-.95L6.3 13.7l-5.45-1.7c-1.18-.35-1.19-1.16.26-1.75l21.26-8.2c.97-.43 1.9.24 1.53 1.73Z" />
-          </svg>
-        </a>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.2.4 2.4.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.2 1l-2.3 2.2Z" />
+            </svg>
+          </a>
+          <a
+            href={TG_CHAT_URL}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={dict.telegram}
+            title={dict.telegram}
+            className={`${FAB_CLS} right-4 bg-[#229ED9] shadow-[0_6px_20px_rgba(34,158,217,0.45)]`}
+            style={FAB_STYLE}
+          >
+            <svg
+              width="26"
+              height="26"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              aria-hidden="true"
+              style={{ marginLeft: -2, marginTop: 2 }}
+            >
+              <path d="M23.91 3.79 20.3 20.84c-.25 1.21-.98 1.5-2 .94l-5.5-4.07-2.66 2.57c-.3.3-.55.56-1.1.56-.72 0-.6-.27-.84-.95L6.3 13.7l-5.45-1.7c-1.18-.35-1.19-1.16.26-1.75l21.26-8.2c.97-.43 1.9.24 1.53 1.73Z" />
+            </svg>
+          </a>
+        </>
       )}
 
       <div className="mx-auto max-w-[1280px] px-5 pb-16 pt-8 md:px-10">
@@ -1632,7 +1660,7 @@ const LOGO_SOURCES = [
   "https://www.lasertag.in.ua/wp-content/uploads/2026/04/logo4.svg",
 ];
 
-function BrandLogo() {
+function BrandLogo({ compact = false }: { compact?: boolean }) {
   const [srcIdx, setSrcIdx] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -1659,7 +1687,11 @@ function BrandLogo() {
   }, [srcIdx, loaded]);
 
   return (
-    <span className="relative inline-block h-10 w-10 sm:h-[52px] sm:w-[52px]">
+    <span
+      className={`relative inline-block shrink-0 ${
+        compact ? "h-9 w-9" : "h-10 w-10 sm:h-[52px] sm:w-[52px]"
+      }`}
+    >
       {srcIdx >= LOGO_SOURCES.length ? (
         <G75Logo />
       ) : (
@@ -1880,6 +1912,12 @@ function LangDropdown({ locale, embed = false }: { locale: Locale; embed?: boole
   const others = all.filter((l) => l !== locale);
   // в embed-режимі перемикання мови не має губити ?embed=1
   const hrefFor = (l: Locale) => `/?lang=${l}${embed ? "&embed=1" : ""}`;
+  // ...і має переключити мову всієї сторінки-обгортки, а не лише рамки:
+  // WordPress слухає це повідомлення і веде на свою мовну версію /book
+  const tellParent = (l: Locale) => {
+    if (!embed || typeof window === "undefined" || window.parent === window) return;
+    window.parent.postMessage({ type: "g75-lang", lang: l }, "*");
+  };
   useEffect(() => {
     if (!open) return;
     const close = () => setOpen(false);
@@ -1902,6 +1940,7 @@ function LangDropdown({ locale, embed = false }: { locale: Locale; embed?: boole
             <a
               key={l}
               href={hrefFor(l)}
+              onClick={() => tellParent(l)}
               className="block px-3 py-1.5 text-[14px] font-semibold text-brand-ink hover:bg-[#f4f4f4]"
             >
               {l.toUpperCase()}

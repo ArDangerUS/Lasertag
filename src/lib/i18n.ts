@@ -11,6 +11,7 @@ const uk = {
   orMessengers: "або напишіть у месенджер:",
   viber: "Viber",
   telegram: "Telegram",
+  backToSite: "На сайт",
   // page
   title: "Онлайн бронювання",
   subtitle: "Оберіть дату, локацію та розваги — ми підготуємо ідеальне свято",
@@ -97,6 +98,7 @@ const ru: Dict = {
   orMessengers: "или напишите в мессенджер:",
   viber: "Viber",
   telegram: "Telegram",
+  backToSite: "На сайт",
   title: "Онлайн бронирование",
   subtitle: "Выберите дату, локацию и развлечения — мы подготовим идеальный праздник",
   weekendBadge: "Выходной тариф",
@@ -180,6 +182,7 @@ const en: Dict = {
   orMessengers: "or message us:",
   viber: "Viber",
   telegram: "Telegram",
+  backToSite: "Back to site",
   title: "Online booking",
   subtitle: "Pick a date, location and activities — we'll prepare the perfect party",
   weekendBadge: "Weekend rate",
