@@ -62,11 +62,11 @@ add_action( 'wp_footer', function () {
 	}
 	?>
 	<style>
-		/* сховати чужий плаваючий віджет ЛИШЕ на цій сторінці */
-		body [class*="floating-contact"],
-		body [id*="floating-contact"],
-		body [class^="fcb"],
-		body [id^="fcb"] { display: none !important; }
+		/* сховати плаваючий віджет плагіна ЛИШЕ на цій сторінці.
+		   Плагін «Floating Contact Button for MAX and Telegram» малює
+		   свої елементи з класами max-button-column / -bubble / -item /
+		   -mother-wrapper — маска ловить усі. */
+		body [class*="max-button"] { display: none !important; }
 
 		/* наша Telegram-кнопка */
 		.g75-tg-fab {
@@ -102,8 +102,8 @@ add_action( 'wp_footer', function () {
 
 ### Якщо чужа кнопка не сховалась
 
-Селектори в стилі вище — за найпоширенішими префіксами класів цього
-плагіна; вони можуть не влучити.
+Маска вище розрахована на поточну версію плагіна (1.2.0). Якщо після
+оновлення плагіна класи зміняться — кнопка знову з'явиться.
 
 **Варіант А (надійніший).** Дізнатись точний клас:
 
