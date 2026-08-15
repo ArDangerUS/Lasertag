@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import PhoneMenu from "./PhoneMenu";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import type { PublicCatalog, PubActivity } from "@/lib/public-catalog";
@@ -28,6 +27,8 @@ type Props = {
   telegramUrl: string;
   // true = сторінка в iframe на WordPress: шапка і плаваючий TG приховані
   embed?: boolean;
+  // куди веде логотип: основний сайт клієнта (HOME_URL) або сама сторінка
+  homeUrl?: string;
 };
 
 const G = "#56EF02";
@@ -46,6 +47,7 @@ export default function BookingClient({
   viberUrl,
   telegramUrl,
   embed = false,
+  homeUrl = "/",
 }: Props) {
   const locations = catalog.locations;
   const [date, setDate] = useState(today);
@@ -747,9 +749,10 @@ export default function BookingClient({
       <header className="sticky top-0 z-50 flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-[#e8e8e8] bg-white px-4 py-2 sm:gap-x-6 sm:py-3 md:px-10">
         {/* LEFT: logo (→ start screen) + brand name, contacts underneath */}
         <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
-          <Link href="/" aria-label={dict.brandName} className="shrink-0">
+          {/* логотип веде на основний сайт (або на початок бронювання) */}
+          <a href={homeUrl} aria-label={dict.brandName} className="shrink-0">
             <BrandLogo />
-          </Link>
+          </a>
           <div className="min-w-0 leading-tight">
             <div className="truncate text-[15px] font-bold text-brand-green sm:text-[17px]">
               {dict.brandName}

@@ -38,6 +38,7 @@ export default async function BookingPage({
       viberUrl={process.env.NEXT_PUBLIC_VIBER_URL || "viber://chat?number=%2B380963940288"}
       telegramUrl={process.env.NEXT_PUBLIC_TELEGRAM_URL || "https://t.me/g75lasertag_bot"}
       embed={embed}
+      homeUrl={process.env.HOME_URL || "https://lasertag.in.ua"}
     />
   );
 }
