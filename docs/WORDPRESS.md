@@ -103,18 +103,50 @@ add_action( 'wp_footer', function () {
 ### Якщо чужа кнопка не сховалась
 
 Селектори в стилі вище — за найпоширенішими префіксами класів цього
-плагіна. Якщо кнопка лишилась:
+плагіна; вони можуть не влучити.
 
-1. На сторінці /book правий клік по ній → **Перевірити (Inspect)**.
-2. У панелі коду піднятись до найзовнішнього `<div>` кнопки й скопіювати
-   його `class` або `id`.
-3. Дописати його в блок `<style>` окремим рядком:
+**Варіант А (надійніший).** Дізнатись точний клас:
+
+1. На сторінці /book правий клік по кнопці → **Перевірити (Inspect)**.
+2. Стрілкою ↑ піднятись до найзовнішнього `<div>` кнопки (підсвітка має
+   охопити кнопку разом із тінню) і скопіювати його `class` або `id`.
+3. Дописати в блок `<style>` окремим рядком:
    `body .СКОПІЙОВАНИЙ-КЛАС { display: none !important; }`
+
+**Варіант Б (без пошуку класу).** Додати в сніпет замість CSS-масок:
+
+```html
+<script>
+(function () {
+	function hideForeignFabs() {
+		var mine = document.querySelector('.g75-tg-fab');
+		Array.prototype.slice.call(document.body.children).forEach(function (el) {
+			if (el === mine || el.id === 'wpadminbar') return;
+			if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE') return;
+			if (getComputedStyle(el).position !== 'fixed') return;
+			var r = el.getBoundingClientRect();
+			// тільки невеликі елементи в нижній частині екрана — щоб не
+			// зачепити шапку, банер згоди тощо
+			if (r.width > 420 || r.height > 420) return;
+			if (r.top < window.innerHeight * 0.35) return;
+			el.style.setProperty('display', 'none', 'important');
+		});
+	}
+	document.addEventListener('DOMContentLoaded', hideForeignFabs);
+	window.addEventListener('load', hideForeignFabs);
+	var n = 0, t = setInterval(function () {      // віджет може домальовуватись
+		hideForeignFabs();
+		if (++n > 20) clearInterval(t);
+	}, 500);
+})();
+</script>
+```
 
 ### Кеш
 
-На сайті активний **LiteSpeed Cache**. Після кожної зміни сніпета —
-**LiteSpeed Cache → Toolbox → Purge All**, інакше зміни не буде видно.
+На сайті стоїть **LiteSpeed Cache**, але хостинг не на LiteSpeed-сервері —
+плагін сам пише, що кешування недоступне, тож чистити нічого. Якщо зміни
+не видно — це кеш браузера: **Ctrl+F5**.
 
 ## 3. Кнопка «Забронювати» в шапці
 
