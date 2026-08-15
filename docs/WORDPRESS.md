@@ -8,29 +8,34 @@
 Блок «HTML» в Elementor на сторінці /book:
 
 ```html
-<div id="g75-book-wrap">
-  <iframe id="g75-book" src="https://book.lasertag.in.ua/?embed=1"
-          style="width:100%;border:0;display:block;min-height:900px"
-          title="Бронювання G-75" loading="lazy"></iframe>
-</div>
+<iframe id="g75-booking"
+  src="https://book.lasertag.in.ua/?embed=1"
+  style="width:100%;min-height:100vh;border:0;display:block;"
+  allow="clipboard-write"
+  title="Онлайн бронювання G-75"></iframe>
 <script>
 (function () {
-  var f = document.getElementById('g75-book');
+  var f = document.getElementById("g75-booking");
 
-  // мова сторінки WordPress → мова форми бронювання
-  var lang = (document.documentElement.lang || 'uk').slice(0, 2).toLowerCase();
-  if (['uk', 'ru', 'en'].indexOf(lang) === -1) lang = 'uk';
-  f.src = 'https://book.lasertag.in.ua/?embed=1&lang=' + lang;
+  // мова сторінки WordPress → мова форми бронювання.
+  // Для української src не чіпаємо, щоб iframe не вантажився двічі.
+  var lang = (document.documentElement.lang || "uk").slice(0, 2).toLowerCase();
+  if (lang !== "uk" && lang !== "ru" && lang !== "en") lang = "uk";
+  if (lang !== "uk") f.src = "https://book.lasertag.in.ua/?embed=1&lang=" + lang;
 
   // висота: сторінка бронювання сама повідомляє свій розмір
-  window.addEventListener('message', function (e) {
-    if (e.origin !== 'https://book.lasertag.in.ua') return;
-    if (!e.data || e.data.type !== 'g75-embed-height') return;
-    f.style.height = e.data.height + 'px';
+  window.addEventListener("message", function (e) {
+    if (e.origin !== "https://book.lasertag.in.ua") return;
+    if (e.data && e.data.type === "g75-embed-height" && e.data.height) {
+      f.style.height = e.data.height + "px";
+    }
   });
 })();
 </script>
 ```
+
+`allow="clipboard-write"` потрібен, щоб у формі працювала дія
+«Скопіювати номер».
 
 Важливо: у `<iframe>` **не має бути атрибута `sandbox`** — інакше посилання
 «← На основний сайт» усередині форми не зможе вийти з iframe.
