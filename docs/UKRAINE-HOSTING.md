@@ -111,10 +111,31 @@ https://book.lasertag.in.ua/
 ## Оновлення надалі
 
 ```bash
-ssh LOGIN@SERVER
-cd ~/book.lasertag.in.ua
+ssh if479641@business-69
+cd /home/if479641/lasertag.in.ua/book
 git pull
-npm install
-npm run build
-# у панелі: Restart для Node-застосунку
+npm install            # лише якщо змінювалися залежності
+npm run build:lowmem   # лише якщо змінювався код (не потрібно для правок скриптів)
 ```
+
+Далі в панелі — **Перезапустити**. Логи мають показати один блок
+`Starting Next on … / ✓ Ready` і замовкнути.
+
+Якщо в логах піде цикл «Port 3000 …» кожні 10 секунд — значить лишився
+процес поза наглядом панелі. Разово почистити:
+
+```bash
+pkill -9 -u if479641 -f "npm"
+pkill -9 -u if479641 -f "next-server"
+sleep 3
+ps -ef | grep -E "npm|next-server" | grep -v grep   # має бути порожньо
+```
+
+і знову «Перезапустити». Здоровий стан — один ланцюжок:
+`lve_suwrapper → bash → npm run start → next-server`.
+
+## Бекап бази
+
+`~/backup-db.sh` копіює `prisma/prod.db` у `~/backups` і лишає 14 останніх
+копій. У панелі (розділ Cron) поставити щоденний запуск о 04:00:
+`/home/if479641/backup-db.sh`
