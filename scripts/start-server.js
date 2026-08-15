@@ -75,29 +75,34 @@ function serverAlive(h, p) {
 }
 
 async function ensurePortFree(h, p) {
-  if (!(await portBusy(h, p))) return true;
-
-  if (await serverAlive(h, p)) {
-    console.log(
-      `Port ${p} already serves a healthy instance - nothing to do, exiting.\n` +
-        "Щоб застосувати оновлення: зупиніть застосунок у панелі (або " +
-        "pkill -f next-server) і запустіть знову."
-    );
-    return false;
-  }
-
-  console.log(`Port ${p} is held by a dead process - clearing it`);
-  try {
-    require("child_process").execSync("pkill -f 'next-server' || true", { stdio: "ignore" });
-  } catch {
-    /* нічого не знайшли — не критично */
-  }
-  for (let i = 0; i < 10; i++) {
-    await new Promise((r) => setTimeout(r, 1000));
+  let announced = false;
+  // Панель може запускати кілька екземплярів (окремі налаштування сайту й
+  // застосунку). Замість того щоб виходити (Supervisor одразу підняв би
+  // новий — і так по колу), зайвий екземпляр стає РЕЗЕРВНИМ: чекає і
+  // підхоплює роботу, якщо основний зникне.
+  for (;;) {
     if (!(await portBusy(h, p))) return true;
+
+    if (await serverAlive(h, p)) {
+      if (!announced) {
+        console.log(
+          `Port ${p} is already served by another instance - standing by. ` +
+            "Цей екземпляр підхопить роботу, якщо основний зупиниться."
+        );
+        announced = true;
+      }
+      await new Promise((r) => setTimeout(r, 10000));
+      continue;
+    }
+
+    console.log(`Port ${p} is held by a dead process - clearing it`);
+    try {
+      require("child_process").execSync("pkill -f 'next-server' || true", { stdio: "ignore" });
+    } catch {
+      /* нічого не знайшли — не критично */
+    }
+    await new Promise((r) => setTimeout(r, 2000));
   }
-  console.error(`Port ${p} is still busy - giving up, supervisor will retry`);
-  process.exit(1);
 }
 
 ensurePortFree(host, port).then((free) => {
