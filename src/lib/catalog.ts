@@ -319,7 +319,10 @@ export const ACTIVITIES: SeedActivity[] = [
     icon: "🍰",
     perPerson: false,
     durationMin: 60,
-    durationOptions: [30, 60], // можна обирати 30 або 60 хв
+    // Кімнату часто беруть на весь час свята, тому крок 30 хв аж до 6 годин.
+    // Ціна рахується як години × тариф за годину + залишкові 30 хв
+    // (tieredBlockPrice), а 60 хв = 2 × 30 хв, тож розбіжностей немає.
+    durationOptions: [30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360],
     cleanupMin: 0,
     minPeople: 1,
     maxPeople: 999,
@@ -347,6 +350,97 @@ export const ADDONS = [
   { key: "cake", nameUk: "Святковий торт", nameRu: "Праздничный торт", nameEn: "Cake", subUk: "ціна залежить від ваги, начинки та дизайну", subRu: "цена зависит от веса, начинки и дизайна", subEn: "price depends on weight, filling and design", price: 0, sortOrder: 6 },
   { key: "merch", nameUk: "Мерч нашої компанії", nameRu: "Мерч нашей компании", nameEn: "Our merch", subUk: "футболки у двох кольорах, брендовані чашки, неонові браслетики", subRu: "футболки в двух цветах, брендированные чашки, неоновые браслетики", subEn: "t-shirts in two colours, branded cups, neon bracelets", price: 0, sortOrder: 7 },
   { key: "arena", nameUk: "Індивідуальне закриття арени", nameRu: "Индивидуальное закрытие арены", nameEn: "Private arena", subUk: "лазертаг тільки для вас, 1 год", subRu: "лазертаг только для вас, 1 час", subEn: "lasertag just for you, 1h", price: 14000, sortOrder: 8 },
+];
+
+// ---------------------------------------------------------------------------
+// Сценарії розваг. Квест-кімната на локації одна, але квестів у ній кілька, і
+// набір різний по локаціях. Вибір сценарію не змінює ні ціну, ні зайнятість —
+// це підказка для менеджера й аргумент для клієнта.
+export type SeedVariant = {
+  key: string;
+  activityKey: string;
+  nameUk: string;
+  nameRu: string;
+  nameEn: string;
+  locationSlugs: string[];
+  sortOrder: number;
+};
+
+const ALL_LOC = ["nyvky", "gorodok", "new-way", "dream-yellow"];
+
+export const ACTIVITY_VARIANTS: SeedVariant[] = [
+  {
+    key: "quest-harry-potter",
+    activityKey: "quest",
+    nameUk: "Гаррі Поттер",
+    nameRu: "Гарри Поттер",
+    nameEn: "Harry Potter",
+    locationSlugs: ALL_LOC,
+    sortOrder: 1,
+  },
+  {
+    key: "quest-hovanky",
+    activityKey: "quest",
+    nameUk: "Хованки",
+    nameRu: "Прятки",
+    nameEn: "Hide and Seek",
+    locationSlugs: ALL_LOC,
+    sortOrder: 2,
+  },
+  {
+    key: "quest-antivirus",
+    activityKey: "quest",
+    nameUk: "Антивірус",
+    nameRu: "Антивирус",
+    nameEn: "Antivirus",
+    locationSlugs: ["nyvky"],
+    sortOrder: 3,
+  },
+  {
+    key: "quest-bank",
+    activityKey: "quest",
+    nameUk: "Пограбування банку",
+    nameRu: "Ограбление банка",
+    nameEn: "Bank Heist",
+    locationSlugs: ["nyvky"],
+    sortOrder: 4,
+  },
+  {
+    key: "quest-roblox",
+    activityKey: "quest",
+    nameUk: "Роблокс",
+    nameRu: "Роблокс",
+    nameEn: "Roblox",
+    locationSlugs: ["nyvky"],
+    sortOrder: 5,
+  },
+  {
+    key: "quest-among-us",
+    activityKey: "quest",
+    nameUk: "Амонг Ас",
+    nameRu: "Амонг Ас",
+    nameEn: "Among Us",
+    locationSlugs: ["dream-yellow"],
+    sortOrder: 6,
+  },
+  {
+    key: "quest-mission",
+    activityKey: "quest",
+    nameUk: "Місія нездійсненна",
+    nameRu: "Миссия невыполнима",
+    nameEn: "Mission Impossible",
+    locationSlugs: ["dream-yellow", "new-way"],
+    sortOrder: 7,
+  },
+  {
+    key: "quest-monsters",
+    activityKey: "quest",
+    nameUk: "Монстри на канікулах",
+    nameRu: "Монстры на каникулах",
+    nameEn: "Hotel Transylvania",
+    locationSlugs: ["gorodok"],
+    sortOrder: 8,
+  },
 ];
 
 // ---------------------------------------------------------------------------

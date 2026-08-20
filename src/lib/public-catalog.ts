@@ -36,6 +36,8 @@ export type PubActivity = {
   sortOrder: number;
   locationIds: string[];
   prices: PubPrice[];
+  // Сценарії (квести): один вибір на позицію, на ціну й зайнятість не впливає.
+  variants: { id: string; name: string; locationIds: string[] }[];
 };
 
 export type PubLocation = {
@@ -90,6 +92,11 @@ export async function loadPublicCatalog(locale: Locale): Promise<PublicCatalog> 
       include: {
         locations: { where: { active: true } },
         prices: true,
+        variants: {
+          where: { active: true },
+          orderBy: { sortOrder: "asc" },
+          include: { locations: true },
+        },
         // only the timestamp — the bytes are served by /api/photos/[id]
         photoBlob: { select: { updatedAt: true } },
       },
@@ -139,6 +146,11 @@ export async function loadPublicCatalog(locale: Locale): Promise<PublicCatalog> 
         durationMin: p.durationMin,
         weekday: p.priceWeekday,
         weekend: p.priceWeekend,
+      })),
+      variants: a.variants.map((v) => ({
+        id: v.id,
+        name: localizedName(v, locale),
+        locationIds: v.locations.map((x) => x.locationId),
       })),
     })),
     addons: addons.map((a) => ({

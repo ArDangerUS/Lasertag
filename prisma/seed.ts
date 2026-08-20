@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import {
   ACTIVITIES,
   ACTIVITY_ROOMS,
+  ACTIVITY_VARIANTS,
   ADDONS,
   LOCATIONS,
   PACKAGES,
@@ -25,6 +26,8 @@ async function main() {
   await prisma.packageItem.deleteMany();
   await prisma.package.deleteMany();
   await prisma.activityPrice.deleteMany();
+  await prisma.activityVariantLocation.deleteMany();
+  await prisma.activityVariant.deleteMany();
   await prisma.activityRoom.deleteMany();
   await prisma.room.deleteMany();
   await prisma.locationActivity.deleteMany();
@@ -138,6 +141,28 @@ async function main() {
     }
   }
   console.log(`  ${roomLinks} activity-room links`);
+
+  // ---- activity variants (сценарії квестів) ----
+  for (const v of ACTIVITY_VARIANTS) {
+    if (!actByKey[v.activityKey]) continue;
+    await prisma.activityVariant.create({
+      data: {
+        id: `var-${v.key}`,
+        key: v.key,
+        activityId: actByKey[v.activityKey],
+        nameUk: v.nameUk,
+        nameRu: v.nameRu,
+        nameEn: v.nameEn,
+        sortOrder: v.sortOrder,
+        locations: {
+          create: v.locationSlugs
+            .filter((slug) => locBySlug[slug])
+            .map((slug) => ({ locationId: locBySlug[slug] })),
+        },
+      },
+    });
+  }
+  console.log(`  ${ACTIVITY_VARIANTS.length} activity variants`);
 
   // ---- addons ----
   for (const ad of ADDONS) {

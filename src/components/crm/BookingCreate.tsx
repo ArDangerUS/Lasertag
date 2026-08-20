@@ -2,10 +2,24 @@
 
 import { useMemo, useState } from "react";
 import type { CrmCatalog } from "@/lib/crm-data";
-import { minToHHMM } from "@/lib/pricing";
+import { fmtMoney, minToHHMM, usesWeekendRate } from "@/lib/pricing";
 import Modal from "./Modal";
 
-type Line = { activityId: string; startMin: number; durationMin: number; people: number; price?: number; roomId?: string };
+type Line = {
+  activityId: string;
+  startMin: number;
+  durationMin: number;
+  people: number;
+  price?: number;
+  roomId?: string;
+  // обраний сценарій (квести)
+  variantId?: string;
+  // позиція комплексу, зарезервована на весь період свята (банкетна) — не бере
+  // участі в послідовному вишиковуванні
+  parallel?: boolean;
+  // «на весь час свята»: початок і тривалість рахуються з решти позицій
+  fullEvent?: boolean;
+};
 
 export default function BookingCreate({
   catalog,
@@ -30,6 +44,11 @@ export default function BookingCreate({
   const [status, setStatus] = useState("CONFIRMED");
   const [lines, setLines] = useState<Line[]>([]);
   const [addonIds, setAddonIds] = useState<Record<string, number>>({});
+  // Обраний комплекс: ціна фіксована, склад підставляється цілком.
+  const [pkgId, setPkgId] = useState("");
+  const [pkgStart, setPkgStart] = useState(initial.startMin ?? 600);
+  // ручна ціна комплексу (знижка); порожньо = за тарифом
+  const [pkgPriceStr, setPkgPriceStr] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -37,15 +56,106 @@ export default function BookingCreate({
     () => catalog.activities.filter((a) => a.locationIds.includes(locationId)),
     [catalog.activities, locationId]
   );
+  const locPackages = useMemo(
+    () => catalog.packages.filter((p) => p.locationIds.includes(locationId)),
+    [catalog.packages, locationId]
+  );
+  const pkg = useMemo(() => locPackages.find((p) => p.id === pkgId) ?? null, [locPackages, pkgId]);
+  const weekend = usesWeekendRate(date);
+
+  const actById = useMemo(
+    () => new Map(catalog.activities.map((a) => [a.id, a])),
+    [catalog.activities]
+  );
+
+  // Ціна комплексу: тариф дня + доплата за учасників понад включену кількість
+  // (власна ставка комплексу або 10% від ціни за кожного) — так само, як на сайті.
+  const pkgAuto = useMemo(() => {
+    if (!pkg) return null;
+    const base = weekend ? pkg.fixedWeekend : pkg.fixedWeekday;
+    const extraCount = Math.max(0, people - pkg.maxPeople);
+    const extraFee = pkg.extraPersonFee > 0 ? pkg.extraPersonFee : Math.round(base * 0.1);
+    return { base, extraCount, extraFee, total: base + extraCount * extraFee };
+  }, [pkg, weekend, people]);
 
   // Rooms available for an activity at the chosen location (manager may pin one).
   const roomOptions = (activityId: string) => {
-    const act = catalog.activities.find((a) => a.id === activityId);
+    const act = actById.get(activityId);
     const ids = act?.roomIdsByLocation[locationId] ?? [];
     return ids
       .map((id) => catalog.rooms.find((r) => r.id === id))
       .filter(Boolean) as { id: string; name: string }[];
   };
+
+  // Сценарії розваги, доступні на цій локації (квести).
+  const variantOptions = (activityId: string) =>
+    (actById.get(activityId)?.variants ?? []).filter((v) => v.locationIds.includes(locationId));
+
+  // Позиції «на весь час свята» розтягуються від початку першої розваги до
+  // кінця останньої. Рахуємо на льоту, щоб значення завжди були актуальні.
+  const effectiveLines = useMemo(() => {
+    const anchors = lines.filter((l) => !l.fullEvent);
+    if (!anchors.length) return lines;
+    const from = Math.min(...anchors.map((l) => l.startMin));
+    const to = Math.max(...anchors.map((l) => l.startMin + l.durationMin));
+    return lines.map((l) =>
+      l.fullEvent ? { ...l, startMin: from, durationMin: Math.max(30, to - from) } : l
+    );
+  }, [lines]);
+
+  // Послідовне вишиковування: звичайні позиції одна за одною від `from`,
+  // паралельні (банкетна на весь період) лишаються на старті.
+  function restack(ls: Line[], from: number): Line[] {
+    let cursor = from;
+    return ls.map((l) => {
+      if (l.parallel || l.fullEvent) return { ...l, startMin: from };
+      const next = { ...l, startMin: cursor };
+      cursor += l.durationMin;
+      return next;
+    });
+  }
+
+  function applyPackage(p: CrmCatalog["packages"][number], startMin: number) {
+    const sorted = [...p.items].sort((a, b) => a.order - b.order);
+    const seq = sorted.filter((i) => !i.parallel);
+    const par = sorted.filter((i) => i.parallel);
+    const mk = (it: (typeof sorted)[number], at: number): Line => ({
+      activityId: it.activityId,
+      startMin: at,
+      durationMin: it.durationMin,
+      // кількість по кожній складовій обрізається до її фізичного ліміту
+      // (квест-кімната до 10) — доплата вже врахована в ціні комплексу
+      people: Math.min(people, actById.get(it.activityId)?.maxPeople ?? people),
+      parallel: it.parallel,
+    });
+    const out: Line[] = [];
+    let cursor = startMin;
+    for (const it of seq) {
+      out.push(mk(it, cursor));
+      cursor += it.durationMin;
+    }
+    for (const it of par) out.push(mk(it, startMin));
+    setPkgId(p.id);
+    setPkgStart(startMin);
+    setPkgPriceStr("");
+    setLines(out);
+  }
+
+  function clearPackage() {
+    setPkgId("");
+    setPkgPriceStr("");
+    setLines([]);
+  }
+
+  function moveLine(i: number, dir: -1 | 1) {
+    setLines((ls) => {
+      const j = i + dir;
+      if (j < 0 || j >= ls.length) return ls;
+      const next = [...ls];
+      [next[i], next[j]] = [next[j], next[i]];
+      return pkgId ? restack(next, pkgStart) : next;
+    });
+  }
 
   function addLineFor(activityId: string) {
     const a = locActivities.find((x) => x.id === activityId);
@@ -69,15 +179,20 @@ export default function BookingCreate({
   }
 
   function updateLine(i: number, patch: Partial<Line>) {
-    setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+    setLines((ls) => {
+      const next = ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l));
+      // у комплексі зміна тривалості зсуває всі наступні позиції
+      return pkgId && patch.durationMin != null ? restack(next, pkgStart) : next;
+    });
   }
 
   async function save() {
     setError("");
     if (!phone.trim()) return setError("Вкажіть телефон");
-    if (lines.length === 0) return setError("Додайте хоча б одну розвагу");
+    if (effectiveLines.length === 0) return setError("Додайте хоча б одну розвагу");
     setSaving(true);
     try {
+      const manualPkgPrice = pkgPriceStr.trim() === "" ? null : Number(pkgPriceStr);
       const res = await fetch("/api/crm/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -88,15 +203,19 @@ export default function BookingCreate({
           customerName: name,
           customerPhone: phone,
           status,
-          items: lines.map((l) => ({
+          ...(pkgId ? { packageId: pkgId } : {}),
+          ...(pkgId && manualPkgPrice != null && Number.isFinite(manualPkgPrice)
+            ? { packagePrice: manualPkgPrice }
+            : {}),
+          items: effectiveLines.map((l) => ({
             activityId: l.activityId,
             startMin: l.startMin,
             durationMin: l.durationMin,
             people: l.people,
-            ...(l.price != null && l.price !== undefined && !Number.isNaN(l.price)
-              ? { price: l.price }
-              : {}),
+            // у комплексі ціну рахує сервер за тарифом комплексу
+            ...(!pkgId && l.price != null && !Number.isNaN(l.price) ? { price: l.price } : {}),
             ...(l.roomId ? { roomId: l.roomId } : {}),
+            ...(l.variantId ? { variantId: l.variantId } : {}),
           })),
           addons: Object.entries(addonIds)
             .filter(([, q]) => q > 0)
@@ -153,6 +272,8 @@ export default function BookingCreate({
               onChange={(e) => {
                 setLocationId(e.target.value);
                 setLines([]);
+                setPkgId("");
+                setPkgPriceStr("");
               }}
               className="w-full rounded-xl border border-[#333] bg-[#0e0e0e] px-3 py-2.5 text-[14px] text-white"
             >
@@ -214,9 +335,95 @@ export default function BookingCreate({
           </div>
         </div>
 
+        {/* packages — фіксована ціна, склад підставляється цілком */}
+        {locPackages.length > 0 && (
+          <div>
+            <Label>Комплекси</Label>
+            <div className="mb-2 flex flex-wrap gap-2">
+              {locPackages.map((p) => {
+                const on = p.id === pkgId;
+                const price = weekend ? p.fixedWeekend : p.fixedWeekday;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => (on ? clearPackage() : applyPackage(p, pkgStart))}
+                    className="rounded-full px-3 py-1.5 text-[12px] font-semibold transition"
+                    style={{
+                      background: on ? "#56EF02" : "#0e0e0e",
+                      color: on ? "#111" : "#bbb",
+                      border: `1px solid ${on ? "#56EF02" : "#333"}`,
+                    }}
+                  >
+                    {p.icon} {p.name} · {fmtMoney(price)}
+                  </button>
+                );
+              })}
+            </div>
+
+            {pkg && pkgAuto && (
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#56EF02]/40 bg-[#56EF02]/10 px-3 py-2.5">
+                <div className="min-w-0 flex-1 text-[13px] text-white">
+                  <div className="font-bold">
+                    {pkg.icon} {pkg.name}
+                    <span className="ml-2 font-normal text-[#bbb]">
+                      включено {pkg.maxPeople} осіб · {weekend ? "вихідний" : "будній"}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 text-[12px] text-[#bbb]">
+                    {fmtMoney(pkgAuto.base)}
+                    {pkgAuto.extraCount > 0 && (
+                      <>
+                        {" "}
+                        + {pkgAuto.extraCount} × {fmtMoney(pkgAuto.extraFee)} за додаткових
+                      </>
+                    )}{" "}
+                    = <span className="font-bold text-white">{fmtMoney(pkgAuto.total)} грн</span>
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1 text-[11px] text-[#888]">Час початку</div>
+                  <select
+                    value={pkgStart}
+                    onChange={(e) => {
+                      const m = Number(e.target.value);
+                      setPkgStart(m);
+                      setLines((ls) => restack(ls, m));
+                    }}
+                    className="rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
+                  >
+                    {startOptions.map((m) => (
+                      <option key={m} value={m}>
+                        {minToHHMM(m)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <div className="mb-1 text-[11px] text-[#888]">Ціна</div>
+                  <input
+                    type="number"
+                    value={pkgPriceStr}
+                    placeholder={String(pkgAuto.total)}
+                    onChange={(e) => setPkgPriceStr(e.target.value)}
+                    className="w-28 rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-right text-[13px] text-white"
+                    title="порожньо = ціна за тарифом комплексу"
+                  />
+                </div>
+                <button
+                  onClick={clearPackage}
+                  className="h-7 w-7 rounded-full bg-[#2a2a2a] text-[#bbb]"
+                  title="Прибрати комплекс"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* activity lines */}
         <div>
-          <Label>Розваги</Label>
+          <Label>{pkg ? "Програма комплексу" : "Розваги"}</Label>
           {/* Кнопки як у додатків: клік = додати лінію з цією розвагою */}
           <div className="mb-2 flex flex-wrap gap-2">
             {locActivities.map((a) => (
@@ -230,19 +437,42 @@ export default function BookingCreate({
             ))}
           </div>
           <div className="flex flex-col gap-2">
-            {lines.map((l, i) => {
-              const act = catalog.activities.find((a) => a.id === l.activityId);
+            {effectiveLines.map((l, i) => {
+              const act = actById.get(l.activityId);
               const durOptions = act?.durationOptions.length ? act.durationOptions : [act?.durationMin ?? 60];
+              const variants = variantOptions(l.activityId);
+              const isRoom = act?.category === "room";
               return (
                 <div key={i} className="flex flex-wrap items-center gap-2 rounded-xl bg-[#0e0e0e] px-3 py-2.5">
+                  {pkg && (
+                    <div className="flex flex-col">
+                      <button
+                        onClick={() => moveLine(i, -1)}
+                        disabled={i === 0}
+                        className="h-4 w-5 text-[10px] leading-none text-[#888] disabled:opacity-30"
+                        title="Вище (час перерахується)"
+                      >
+                        ▲
+                      </button>
+                      <button
+                        onClick={() => moveLine(i, 1)}
+                        disabled={i === effectiveLines.length - 1}
+                        className="h-4 w-5 text-[10px] leading-none text-[#888] disabled:opacity-30"
+                        title="Нижче (час перерахується)"
+                      >
+                        ▼
+                      </button>
+                    </div>
+                  )}
                   <select
                     value={l.activityId}
                     onChange={(e) => {
-                      const a = catalog.activities.find((x) => x.id === e.target.value);
+                      const a = actById.get(e.target.value);
                       updateLine(i, {
                         activityId: e.target.value,
                         durationMin: a?.durationOptions[0] ?? a?.durationMin ?? 60,
                         roomId: undefined,
+                        variantId: undefined,
                       });
                     }}
                     className="flex-1 rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
@@ -253,10 +483,26 @@ export default function BookingCreate({
                       </option>
                     ))}
                   </select>
+                  {variants.length > 0 && (
+                    <select
+                      value={l.variantId ?? ""}
+                      onChange={(e) => updateLine(i, { variantId: e.target.value || undefined })}
+                      className="max-w-[190px] rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
+                      title="Сценарій"
+                    >
+                      <option value="">сценарій: не обрано</option>
+                      {variants.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <select
                     value={l.startMin}
+                    disabled={l.fullEvent}
                     onChange={(e) => updateLine(i, { startMin: Number(e.target.value) })}
-                    className="rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
+                    className="rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white disabled:opacity-50"
                   >
                     {startOptions.map((m) => (
                       <option key={m} value={m}>
@@ -266,15 +512,32 @@ export default function BookingCreate({
                   </select>
                   <select
                     value={l.durationMin}
+                    disabled={l.fullEvent}
                     onChange={(e) => updateLine(i, { durationMin: Number(e.target.value) })}
-                    className="rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
+                    className="rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white disabled:opacity-50"
                   >
-                    {durOptions.map((d) => (
+                    {(durOptions.includes(l.durationMin)
+                      ? durOptions
+                      : [...durOptions, l.durationMin].sort((a, b) => a - b)
+                    ).map((d) => (
                       <option key={d} value={d}>
-                        {d} хв
+                        {d >= 60 ? `${d / 60} год` : `${d} хв`}
                       </option>
                     ))}
                   </select>
+                  {isRoom && (
+                    <label
+                      className="flex items-center gap-1.5 text-[12px] text-[#bbb]"
+                      title="Кімната тримається від початку першої розваги до кінця останньої"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!l.fullEvent}
+                        onChange={(e) => updateLine(i, { fullEvent: e.target.checked })}
+                      />
+                      весь час
+                    </label>
+                  )}
                   {roomOptions(l.activityId).length > 0 && (
                     <select
                       value={l.roomId ?? ""}
@@ -298,18 +561,25 @@ export default function BookingCreate({
                     className="w-16 rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
                     title="учасників"
                   />
-                  <input
-                    type="number"
-                    value={l.price ?? ""}
-                    placeholder="авто"
-                    onChange={(e) =>
-                      updateLine(i, { price: e.target.value === "" ? undefined : Number(e.target.value) })
-                    }
-                    className="w-24 rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-right text-[13px] text-white"
-                    title="ціна (порожньо = розрахує система)"
-                  />
+                  {!pkg && (
+                    <input
+                      type="number"
+                      value={l.price ?? ""}
+                      placeholder="авто"
+                      onChange={(e) =>
+                        updateLine(i, { price: e.target.value === "" ? undefined : Number(e.target.value) })
+                      }
+                      className="w-24 rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-right text-[13px] text-white"
+                      title="ціна (порожньо = розрахує система)"
+                    />
+                  )}
                   <button
-                    onClick={() => setLines((ls) => ls.filter((_, idx) => idx !== i))}
+                    onClick={() =>
+                      setLines((ls) => {
+                        const next = ls.filter((_, idx) => idx !== i);
+                        return pkgId ? restack(next, pkgStart) : next;
+                      })
+                    }
                     className="h-7 w-7 rounded-full bg-[#2a2a2a] text-[#bbb]"
                   >
                     ✕
@@ -317,15 +587,16 @@ export default function BookingCreate({
                 </div>
               );
             })}
-            {lines.length === 0 && (
+            {effectiveLines.length === 0 && (
               <div className="rounded-xl border border-dashed border-[#333] px-3 py-4 text-center text-[13px] text-[#777]">
-                Додайте розваги до броні
+                Оберіть комплекс або додайте розваги до броні
               </div>
             )}
           </div>
           <p className="mt-2 text-[11px] text-[#777]">
-            Порожнє поле ціни = система порахує за тарифом (будній/вихідний). Ціну можна змінити після
-            створення.
+            {pkg
+              ? "Ціна комплексу фіксована — окремі позиції не тарифікуються. Стрілками ▲▼ міняйте порядок: час перерахується автоматично."
+              : "Порожнє поле ціни = система порахує за тарифом (будній/вихідний). Ціну можна змінити після створення."}
           </p>
         </div>
 

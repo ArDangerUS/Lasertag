@@ -33,6 +33,7 @@ model Location {
 
   activities LocationActivity[]
   packages   PackageLocation[]
+  variants   ActivityVariantLocation[]
   bookings   Booking[]
   rooms      Room[]
   createdAt  DateTime @default(now())
@@ -56,6 +57,34 @@ model Room {
   items      BookingItem[]
 
   @@unique([locationId, key])
+}
+
+// Сценарій/варіант розваги: квест-кімната одна, але квестів у ній кілька
+// («Гаррі Поттер», «Хованки», «Пограбування банку»…), і набір відрізняється
+// по локаціях. На завантаженість і ціну не впливає — це лише вибір сценарію.
+model ActivityVariant {
+  id         String   @id @default(cuid())
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  activityId String
+  key        String   @unique // quest-harry-potter
+  nameUk     String
+  nameRu     String   @default("")
+  nameEn     String   @default("")
+  sortOrder  Int      @default(0)
+  active     Boolean  @default(true)
+
+  locations ActivityVariantLocation[]
+  items     BookingItem[]
+}
+
+model ActivityVariantLocation {
+  id         String          @id @default(cuid())
+  variant    ActivityVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  variantId  String
+  location   Location        @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  locationId String
+
+  @@unique([variantId, locationId])
 }
 
 model ActivityRoom {
@@ -100,6 +129,7 @@ model Activity {
   bookingItems BookingItem[]
   prices    ActivityPrice[]
   rooms     ActivityRoom[]
+  variants  ActivityVariant[]
   photoBlob ActivityPhotoBlob?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -262,6 +292,11 @@ model Booking {
   totalPrice Int      @default(0) // grn, snapshot of computed total (editable)
   prepaidAmount Int   @default(0) // сплачений аванс (grn)
 
+  // Бронь створена як комплекс: ціна фіксована (не сума позицій), а в
+  // календарі/картці видно назву комплексу. Порожньо = поштучний набір.
+  packageId   String? // Package.id, без FK: комплекс можуть видалити з каталогу
+  packageName String  @default("")
+
   // Telegram linkage for the confirmation flow
   telegramChatId  String @default("")
   // ID картки у KeyCRM (якщо інтеграцію ввімкнено), щоб оновлювати/видаляти її
@@ -299,6 +334,11 @@ model BookingItem {
   // mapped rooms). Null for legacy items / activities without rooms.
   room       Room?   @relation(fields: [roomId], references: [id], onDelete: SetNull)
   roomId     String?
+  // Обраний сценарій (для квестів). variantName — знімок назви, щоб картка
+  // читалась навіть після перейменування чи видалення варіанта з каталогу.
+  variant     ActivityVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  variantId   String?
+  variantName String  @default("")
 
   @@index([bookingId])
 }

@@ -24,6 +24,8 @@ export const updateBookingSchema = z.object({
         people: z.number().int().min(1).max(200).optional(),
         // specific room; null = зняти призначення (авто при потребі)
         roomId: z.string().nullable().optional(),
+        // сценарій розваги (квести); null = «не обрано»
+        variantId: z.string().nullable().optional(),
       })
     )
     .optional(),
@@ -52,6 +54,21 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
       if (it.startMin != null) data.startMin = it.startMin;
       if (it.durationMin != null) data.durationMin = it.durationMin;
       if (it.people != null) data.people = it.people;
+
+      // Сценарій розваги (квест): зберігаємо і зв'язок, і знімок назви.
+      if (it.variantId !== undefined && it.variantId !== beforeItem.variantId) {
+        if (it.variantId) {
+          const v = await prisma.activityVariant.findUnique({ where: { id: it.variantId } });
+          if (!v || v.activityId !== beforeItem.activityId) {
+            throw new Error("Цей сценарій не належить цій розвазі");
+          }
+          data.variantId = v.id;
+          data.variantName = v.nameUk;
+        } else {
+          data.variantId = null;
+          data.variantName = "";
+        }
+      }
 
       // Manager picked a specific room for this item.
       if (it.roomId !== undefined && it.roomId !== beforeItem.roomId) {

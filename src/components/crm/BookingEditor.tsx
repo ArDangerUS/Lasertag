@@ -37,6 +37,10 @@ export default function BookingEditor({
   const [itemRooms, setItemRooms] = useState<Record<string, string>>(
     Object.fromEntries(booking.items.map((i) => [i.id, i.roomId ?? ""]))
   );
+  // обраний сценарій розваги (квести)
+  const [itemVariants, setItemVariants] = useState<Record<string, string>>(
+    Object.fromEntries(booking.items.map((i) => [i.id, i.variantId ?? ""]))
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   // Внутрішні коментарі менеджерів (окремо від короткого коментаря клієнта)
@@ -118,6 +122,9 @@ export default function BookingEditor({
             ...(itemRooms[i.id] !== (i.roomId ?? "")
               ? { roomId: itemRooms[i.id] || null }
               : {}),
+            ...(itemVariants[i.id] !== (i.variantId ?? "")
+              ? { variantId: itemVariants[i.id] || null }
+              : {}),
           })),
         }),
       });
@@ -156,6 +163,12 @@ export default function BookingEditor({
           </span>
           {booking.createdByName && (
             <span className="rounded-full bg-[#0e0e0e] px-3 py-1">автор: {booking.createdByName}</span>
+          )}
+          {/* бронь продана як комплекс — ціна фіксована, не сума позицій */}
+          {booking.packageName && (
+            <span className="rounded-full bg-[#56EF02]/15 px-3 py-1 font-bold text-[#56EF02]">
+              🎁 Комплекс «{booking.packageName}»
+            </span>
           )}
           {/* службова примітка з сайту (наприклад, назва комплексу) */}
           {booking.comment && (
@@ -243,15 +256,40 @@ export default function BookingEditor({
           <div className="flex flex-col gap-2">
             {booking.items.map((i) => {
               const rooms = roomOptions(i.activityId);
+              const variants = (
+                catalog.activities.find((a) => a.id === i.activityId)?.variants ?? []
+              ).filter((v) => v.locationIds.includes(booking.locationId));
               return (
                 <div key={i.id} className="flex flex-wrap items-center gap-3 rounded-xl bg-[#0e0e0e] px-3 py-2.5">
                   <div className="min-w-0 flex-1">
-                    <div className="text-[13px] font-semibold">{i.title}</div>
+                    <div className="text-[13px] font-semibold">
+                      {i.title}
+                      {i.variantName && (
+                        <span className="ml-1.5 font-normal text-[#56EF02]">«{i.variantName}»</span>
+                      )}
+                    </div>
                     <div className="text-[11px] text-[#888]">
                       {minToHHMM(i.startMin)}–{minToHHMM(i.startMin + i.durationMin)} · {i.people} ос
                       {!rooms.length && i.roomName ? ` · ${i.roomName}` : ""}
                     </div>
                   </div>
+                  {/* сценарій (квести): на ціну й зайнятість не впливає */}
+                  {variants.length > 0 && (
+                    <select
+                      value={itemVariants[i.id] ?? ""}
+                      disabled={!canWrite}
+                      onChange={(e) => setItemVariants((m) => ({ ...m, [i.id]: e.target.value }))}
+                      className="max-w-[190px] rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[12px] text-white"
+                      title="Сценарій"
+                    >
+                      <option value="">сценарій: не обрано</option>
+                      {variants.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   {/* Manager can pin a specific room (validated server-side) */}
                   {rooms.length > 0 && (
                     <select

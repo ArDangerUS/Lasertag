@@ -44,12 +44,16 @@ export async function pushBookingToKeycrm(bookingId: string): Promise<void> {
 
     const lines = b.items.map(
       (i) =>
-        `• ${i.title} ${minToHHMM(i.startMin)}–${minToHHMM(i.startMin + i.durationMin)} · ${i.people} ос · ${i.price} грн`
+        `• ${i.title}${i.variantName ? ` «${i.variantName}»` : ""} ${minToHHMM(i.startMin)}–${minToHHMM(
+          i.startMin + i.durationMin
+        )} · ${i.people} ос · ${i.price} грн`
     );
     const addonLines = b.addons.map((a) => `• ${a.title} ×${a.qty} · ${a.price} грн`);
     const comment =
       `Заявка з сайту бронювання G-75\n` +
-      `Локація: ${b.location.name}\nДата: ${b.date}\nУчасників: ${b.people}\n\n` +
+      `Локація: ${b.location.name}\nДата: ${b.date}\nУчасників: ${b.people}\n` +
+      (b.packageName ? `Комплекс: ${b.packageName}\n` : "") +
+      `\n` +
       lines.join("\n") +
       (addonLines.length ? `\n\nДодатково:\n${addonLines.join("\n")}` : "") +
       `\n\nРазом: ${b.totalPrice} грн` +

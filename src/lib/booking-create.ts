@@ -1,5 +1,11 @@
 import { prisma } from "./prisma";
-import { resolvePrice, tieredBlockPrice, makeCode, lasertagMorningDiscount } from "./pricing";
+import {
+  resolvePrice,
+  tieredBlockPrice,
+  makeCode,
+  lasertagMorningDiscount,
+  usesWeekendRate,
+} from "./pricing";
 import { audit } from "./audit";
 import { pushBookingToKeycrm } from "./keycrm";
 import type { SessionUser } from "./auth";
@@ -14,6 +20,8 @@ export const bookingItemSchema = z.object({
   price: z.number().int().min(0).optional(),
   // optional specific room (CRM manager's choice); absent = auto-assign
   roomId: z.string().optional(),
+  // обраний сценарій розваги (квести); не впливає на ціну й зайнятість
+  variantId: z.string().optional(),
 });
 
 export const bookingAddonSchema = z.object({
@@ -31,6 +39,11 @@ export const createBookingSchema = z.object({
   lang: z.string().default("uk"),
   items: z.array(bookingItemSchema).min(1),
   addons: z.array(bookingAddonSchema).default([]),
+  // Бронь як комплекс: ціна фіксована, позиції — його склад.
+  packageId: z.string().optional(),
+  // ручна ціна комплексу (знижка постійному клієнту); за замовчуванням
+  // рахується за тарифом комплексу
+  packagePrice: z.number().int().min(0).optional(),
   source: z.enum(["SITE", "CRM"]).default("SITE"),
   status: z.enum(["NEW", "CONFIRMED", "PREPAID", "CANCELLED"]).optional(),
   prepaidAmount: z.number().int().min(0).optional(),
@@ -57,6 +70,36 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
     include: { prices: true, rooms: { include: { room: true } } },
   });
   const actById = new Map(activities.map((a) => [a.id, a]));
+
+  // ---- package (fixed price) ---------------------------------------------
+  // Комплекс продається за фіксованою ціною (будні/вихідні) незалежно від
+  // кількості учасників — доки їх не більше, ніж включено. За кожного понад
+  // включену кількість — доплата: власна ставка комплексу («Сталкер» 1500)
+  // або 10% від ціни комплексу.
+  const pkg = input.packageId
+    ? await prisma.package.findUnique({ where: { id: input.packageId } })
+    : null;
+  if (input.packageId && !pkg) throw new Error("Комплекс не знайдено");
+  let packagePrice = 0;
+  if (pkg) {
+    if (input.packagePrice != null) {
+      packagePrice = input.packagePrice;
+    } else {
+      const base = usesWeekendRate(input.date) ? pkg.fixedPriceWeekend : pkg.fixedPriceWeekday;
+      const extraCount = Math.max(0, input.people - pkg.maxPeople);
+      const extraFee = pkg.extraPersonFee > 0 ? pkg.extraPersonFee : Math.round(base * 0.1);
+      packagePrice = base + extraCount * extraFee;
+    }
+  }
+
+  // ---- activity variants (сценарії квестів) ------------------------------
+  const variantIds = Array.from(
+    new Set(input.items.map((i) => i.variantId).filter(Boolean) as string[])
+  );
+  const variants = variantIds.length
+    ? await prisma.activityVariant.findMany({ where: { id: { in: variantIds } } })
+    : [];
+  const varById = new Map(variants.map((v) => [v.id, v]));
 
   // ---- room auto-assignment ----------------------------------------------
   // Each item takes one of its activity's mapped rooms at this location.
@@ -174,6 +217,10 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
       }
     }
     const price = it.price != null ? it.price : act.perPerson ? unit * it.people : unit;
+    const variant = it.variantId ? varById.get(it.variantId) : null;
+    if (variant && variant.activityId !== act.id) {
+      throw new Error(`«${act.nameUk}»: обраний сценарій належить іншій розвазі`);
+    }
     return {
       activityId: act.id,
       title: act.nameUk,
@@ -182,8 +229,18 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
       people: it.people,
       price,
       roomId: pickRoom(act.id, it.startMin, it.durationMin, it.roomId),
+      variantId: variant?.id ?? null,
+      variantName: variant?.nameUk ?? "",
     };
   });
+
+  // Ціна комплексу лягає на першу позицію, решта — 0. Так сума позицій завжди
+  // дорівнює оголошеній ціні комплексу, скільки б розваг у ньому не було.
+  if (pkg) {
+    itemData.forEach((row, idx) => {
+      row.price = idx === 0 ? packagePrice : 0;
+    });
+  }
 
   const addonRows = input.addons.length
     ? await prisma.addon.findMany({ where: { id: { in: input.addons.map((a) => a.addonId) } } })
@@ -231,6 +288,8 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
       people: input.people,
       totalPrice: total,
       prepaidAmount: input.prepaidAmount ?? 0,
+      packageId: pkg?.id ?? null,
+      packageName: pkg?.nameUk ?? "",
       createdById: actor?.id ?? null,
       items: { create: itemData },
       addons: { create: addonData },
@@ -244,7 +303,9 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
     entity: "Booking",
     entityId: booking.id,
     bookingId: booking.id,
-    summary: `Створено бронь ${booking.code} · ${location.name} · ${input.date} · ${total} грн`,
+    summary: `Створено бронь ${booking.code} · ${location.name} · ${input.date}${
+      pkg ? ` · комплекс «${pkg.nameUk}»` : ""
+    } · ${total} грн`,
     after: { code: booking.code, total, items: itemData.length },
   });
 

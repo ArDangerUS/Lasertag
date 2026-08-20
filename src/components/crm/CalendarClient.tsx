@@ -393,7 +393,9 @@ function BookingChip({ b, onClick }: { b: CrmBooking; onClick: () => void }) {
         {b.customerName || b.customerPhone}
       </div>
       <div className={`truncate text-[11px] ${cancelled ? "text-[#bbb]" : "text-[#666]"}`}>
-        {act ? `${act.title} · ${b.people} ос` : `${b.people} ос`}
+        {act
+          ? `${act.title}${act.variantName ? ` «${act.variantName}»` : ""} · ${b.people} ос`
+          : `${b.people} ос`}
       </div>
     </button>
   );
@@ -828,7 +830,9 @@ function DayChip({ b, onClick }: { b: CrmBooking; onClick: () => void }) {
         </span>
       </div>
       <div className={`truncate text-[11px] ${cancelled ? "text-[#bbb]" : "text-[#666]"}`}>
-        {act ? `${act.title} · ${b.people} ос · ${b.customerPhone}` : b.customerPhone}
+        {act
+          ? `${act.title}${act.variantName ? ` «${act.variantName}»` : ""} · ${b.people} ос · ${b.customerPhone}`
+          : b.customerPhone}
       </div>
     </button>
   );

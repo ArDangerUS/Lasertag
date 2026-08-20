@@ -89,6 +89,9 @@ export default function BookingClient({
   const [pkgOpenId, setPkgOpenId] = useState<string | null>(null);
   const [pkgBooking, setPkgBooking] = useState<{ packageId: string; startMin: number } | null>(null);
   const [expandedPerks, setExpandedPerks] = useState<Record<string, boolean>>({});
+  // Обраний сценарій розваги (квести): activityId → variantId. Порожньо =
+  // «порадьте» — на ціну й доступність часу не впливає.
+  const [variantByAct, setVariantByAct] = useState<Record<string, string>>({});
 
   const location = locations.find((l) => l.id === locationId) ?? locations[0];
 
@@ -169,6 +172,7 @@ export default function BookingClient({
     setPkgOpenId(null);
     setPkgBooking(null);
     setExpandedPerks({}); // always collapse details when returning to a location
+    setVariantByAct({}); // набір сценаріїв відрізняється по локаціях
   }, [locationId, locActivities]);
 
   // If the group grows beyond an activity's capacity, drop that selection.
@@ -390,6 +394,20 @@ export default function BookingClient({
     () => locActivities.filter((a) => chosen[a.id]),
     [locActivities, chosen]
   );
+
+  // Розваги, у яких на цій локації є сценарії на вибір (квести) і які клієнт
+  // уже додав — окремо чи у складі комплексу.
+  const variantActs = useMemo(() => {
+    const ids = new Set<string>(chosenActs.map((a) => a.id));
+    if (pkgBooking) {
+      catalog.packages
+        .find((x) => x.id === pkgBooking.packageId)
+        ?.items.forEach((it) => ids.add(it.activityId));
+    }
+    return locActivities.filter(
+      (a) => ids.has(a.id) && a.variants.some((v) => v.locationIds.includes(locationId))
+    );
+  }, [chosenActs, pkgBooking, catalog.packages, locActivities, locationId]);
 
   const toggleChosen = (id: string) =>
     setChosen((prev) => {
@@ -675,11 +693,12 @@ export default function BookingClient({
         durationMin: i.durationMin,
         people: i.people,
         ...(i.priceOverride != null ? { price: i.priceOverride } : {}),
+        ...(variantByAct[i.activityId] ? { variantId: variantByAct[i.activityId] } : {}),
       }));
-      // Package items: fixed package price on the first item, 0 on the rest so
-      // the booking total equals the advertised package price.
+      // Package items: ціну комплексу рахує сервер за packageId (щоб клієнт
+      // не міг її підмінити) — сюди йде лише склад і час.
       const packageItems = cart.pkg
-        ? cart.pkg.items.map((it, idx) => ({
+        ? cart.pkg.items.map((it) => ({
             activityId: it.activityId,
             startMin: it.startMin,
             durationMin: it.durationMin,
@@ -687,7 +706,7 @@ export default function BookingClient({
             // ліміту (наприклад, квест-кімната до 10) — доплата за
             // додаткових учасників уже врахована в ціні комплексу
             people: Math.min(people, actById.get(it.activityId)?.maxPeople ?? people),
-            price: idx === 0 ? cart.pkg!.price : 0,
+            ...(variantByAct[it.activityId] ? { variantId: variantByAct[it.activityId] } : {}),
           }))
         : [];
 
@@ -700,8 +719,9 @@ export default function BookingClient({
           people,
           customerName,
           customerPhone,
-          comment: cart.pkg ? `Комплекс: ${cart.pkg.name}` : "",
+          comment: "",
           lang: locale,
+          ...(cart.pkg ? { packageId: cart.pkg.packageId } : {}),
           items: [...individualItems, ...packageItems],
           addons: [
             ...cart.addons.map((a) => ({ addonId: a.id, qty: a.qty })),
@@ -1164,6 +1184,37 @@ export default function BookingClient({
                   );
                 })}
               </div>
+
+              {/* Сценарії (квести): вибір не впливає на ціну й вільний час */}
+              {variantActs.map((a) => {
+                const vars = a.variants.filter((v) => v.locationIds.includes(locationId));
+                const sel = variantByAct[a.id] ?? "";
+                return (
+                  <div key={a.id} className="mt-5">
+                    <div className="mb-2 text-[12px] font-bold tracking-wider text-[#777]">
+                      {a.icon} {a.name.toUpperCase()} — {dict.variantTitle.toUpperCase()}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {[{ id: "", name: dict.variantAny }, ...vars].map((v) => {
+                        const on = sel === v.id;
+                        return (
+                          <button
+                            key={v.id || "any"}
+                            onClick={() => setVariantByAct((m) => ({ ...m, [a.id]: v.id }))}
+                            className={`rounded-full px-3.5 py-2 text-[13px] font-semibold transition ${
+                              on
+                                ? "border-2 border-[#56EF02] bg-[#f6fee9] text-brand-ink"
+                                : "border border-[#E5E5E5] bg-white text-[#666] hover:border-[#bbb]"
+                            }`}
+                          >
+                            {v.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
 
               {/* Availability calendar */}
               <div className="mb-3 mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">

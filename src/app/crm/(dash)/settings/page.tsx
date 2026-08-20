@@ -13,7 +13,12 @@ export default async function SettingsPage() {
   const [activities, locations, addons, packages] = await Promise.all([
     prisma.activity.findMany({
       orderBy: { sortOrder: "asc" },
-      include: { prices: true, locations: true, photoBlob: { select: { updatedAt: true } } },
+      include: {
+        prices: true,
+        locations: true,
+        variants: { orderBy: { sortOrder: "asc" }, include: { locations: true } },
+        photoBlob: { select: { updatedAt: true } },
+      },
     }),
     prisma.location.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.addon.findMany({
@@ -45,6 +50,14 @@ export default async function SettingsPage() {
         maxPeople: a.maxPeople,
         cleanupMin: a.cleanupMin,
         locations: a.locations.map((x) => ({ locationId: x.locationId, capacity: x.capacity })),
+        variants: a.variants.map((v) => ({
+          id: v.id,
+          nameUk: v.nameUk,
+          nameRu: v.nameRu,
+          nameEn: v.nameEn,
+          active: v.active,
+          locationIds: v.locations.map((x) => x.locationId),
+        })),
         prices: a.prices.map((p) => ({
           id: p.id,
           locationName: p.locationId ? locName.get(p.locationId) ?? "—" : "Базова (усі локації)",

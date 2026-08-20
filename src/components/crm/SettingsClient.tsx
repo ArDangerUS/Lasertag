@@ -13,6 +13,16 @@ type Price = {
 type Loc = { id: string; name: string };
 type LocLink = { locationId: string; capacity: number };
 
+// Сценарій розваги: у квест-кімнаті кілька квестів, і набір різний по локаціях.
+type VariantRow = {
+  id: string;
+  nameUk: string;
+  nameRu: string;
+  nameEn: string;
+  active: boolean;
+  locationIds: string[];
+};
+
 type Act = {
   id: string;
   key: string;
@@ -21,6 +31,7 @@ type Act = {
   nameEn: string;
   icon: string;
   active: boolean;
+  variants: VariantRow[];
   photoUrl: string; // "" = немає завантаженого фото (сайт бере /activities/<key>.jpg)
   perPerson: boolean;
   minPeople: number;
@@ -832,6 +843,8 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
         </table>
       </div>
 
+      <VariantsBlock act={act} locations={locations} />
+
       <div className="mt-4 flex items-center justify-between">
         <button
           onClick={removeActivity}
@@ -848,6 +861,166 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
           Зберегти розвагу
         </button>
       </div>
+    </div>
+  );
+}
+
+/* ---------------- сценарії розваги (квести) ---------------- */
+
+// Один список на розвагу: назва + локації, де цей сценарій доступний. Вибір
+// сценарію в броні не змінює ні ціну, ні зайнятість — квест-кімната одна.
+function VariantsBlock({ act, locations }: { act: Act; locations: Loc[] }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [newName, setNewName] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  async function call(url: string, method: string, body?: unknown) {
+    setBusy(true);
+    setErr("");
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Помилка");
+      router.refresh();
+      return true;
+    } catch (e: any) {
+      setErr(e?.message || "Помилка");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addVariant() {
+    if (!newName.trim()) return;
+    const ok = await call("/api/crm/variants", "POST", {
+      activityId: act.id,
+      nameUk: newName.trim(),
+      // за замовчуванням сценарій доступний там, де є сама розвага
+      locationIds: act.locations.map((l) => l.locationId),
+    });
+    if (ok) {
+      setNewName("");
+      setAdding(false);
+    }
+  }
+
+  function toggleLoc(v: VariantRow, locationId: string) {
+    const next = v.locationIds.includes(locationId)
+      ? v.locationIds.filter((x) => x !== locationId)
+      : [...v.locationIds, locationId];
+    call(`/api/crm/variants/${v.id}`, "PATCH", { locationIds: next });
+  }
+
+  return (
+    <div className="mt-5 border-t border-[#2a2a2a] pt-4">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="text-[12px] font-bold tracking-wide text-[#888]">
+          СЦЕНАРІЇ {act.variants.length > 0 && `(${act.variants.length})`}
+        </div>
+        <button
+          onClick={() => setAdding((v) => !v)}
+          className="rounded-full bg-[#0e0e0e] px-3 py-1.5 text-[12px] font-bold text-[#56EF02] ring-1 ring-[#333]"
+        >
+          {adding ? "Скасувати" : "+ Сценарій"}
+        </button>
+      </div>
+      <p className="mb-3 text-[11px] text-[#777]">
+        Наприклад, різні квести в одній кімнаті. Клієнт обирає сценарій при бронюванні; на ціну й
+        зайнятість це не впливає.
+      </p>
+
+      {adding && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addVariant()}
+            placeholder="Назва сценарію, напр. «Гаррі Поттер»"
+            className="min-w-[240px] flex-1 rounded-lg border border-[#333] bg-[#0e0e0e] px-3 py-2 text-[13px] text-white"
+          />
+          <button
+            onClick={addVariant}
+            disabled={busy}
+            className="rounded-full bg-[#56EF02] px-4 py-2 text-[13px] font-bold text-[#1A1A1A]"
+          >
+            Додати
+          </button>
+        </div>
+      )}
+
+      {act.variants.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-[#333] px-3 py-3 text-center text-[12px] text-[#777]">
+          Сценаріїв немає — розвага бронюється як є
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {act.variants.map((v) => (
+            <div key={v.id} className="rounded-xl bg-[#0e0e0e] px-3 py-2.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  defaultValue={v.nameUk}
+                  onBlur={(e) => {
+                    const name = e.target.value.trim();
+                    if (name && name !== v.nameUk) {
+                      call(`/api/crm/variants/${v.id}`, "PATCH", { nameUk: name });
+                    }
+                  }}
+                  className="min-w-[180px] flex-1 rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
+                />
+                <label className="flex items-center gap-1.5 text-[12px] text-[#bbb]">
+                  <input
+                    type="checkbox"
+                    checked={v.active}
+                    onChange={(e) =>
+                      call(`/api/crm/variants/${v.id}`, "PATCH", { active: e.target.checked })
+                    }
+                  />
+                  показувати
+                </label>
+                <button
+                  onClick={() => {
+                    if (confirm(`Видалити сценарій «${v.nameUk}»?`)) {
+                      call(`/api/crm/variants/${v.id}`, "DELETE");
+                    }
+                  }}
+                  className="h-7 w-7 rounded-full bg-[#2a2a2a] text-[#ff7a7a]"
+                  title="Видалити сценарій"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {locations.map((l) => {
+                  const on = v.locationIds.includes(l.id);
+                  return (
+                    <button
+                      key={l.id}
+                      onClick={() => toggleLoc(v, l.id)}
+                      disabled={busy}
+                      className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                      style={{
+                        background: on ? "#56EF02" : "#161616",
+                        color: on ? "#111" : "#888",
+                        border: `1px solid ${on ? "#56EF02" : "#333"}`,
+                      }}
+                    >
+                      {l.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {err && <div className="mt-2 text-[12px] text-[#ff8a5c]">{err}</div>}
     </div>
   );
 }
