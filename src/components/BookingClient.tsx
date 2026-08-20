@@ -441,12 +441,30 @@ export default function BookingClient({
     return ranges;
   }, [picks, actById, actDuration, pkgBooking, catalog.packages, fitPackage, expandPackage]);
 
+  // Клітинка, яку накриває ВЖЕ обраний слот цієї ж розваги: квест на 11:00
+  // триває годину, тож рядок 11:30 — це продовження вибору, а не чужий час.
+  const coveringPickStart = useCallback(
+    (a: PubActivity, startMin: number): number | null => {
+      const dur = actDuration(a);
+      const p = picks.find(
+        (x) => x.activityId === a.id && x.startMin < startMin && x.startMin + dur > startMin
+      );
+      return p ? p.startMin : null;
+    },
+    [picks, actDuration]
+  );
+
   // Slot status for an activity's start minute.
+  //   selected   — початок обраного слота
+  //   mineCont   — продовження того самого слота (та сама розвага)
+  //   mineOther  — час зайнятий ІНШОЮ вашою розвагою чи комплексом
+  //   busy       — зайнято кимось іншим / поза графіком
   const slotStatus = useCallback(
-    (a: PubActivity, startMin: number): "selected" | "busy" | "free" => {
+    (a: PubActivity, startMin: number): "selected" | "mineCont" | "mineOther" | "busy" | "free" => {
       const dur = actDuration(a);
       const end = startMin + dur;
       if (picks.some((p) => p.activityId === a.id && p.startMin === startMin)) return "selected";
+      if (coveringPickStart(a, startMin) != null) return "mineCont";
       if (end > location.closeMin) return "busy";
       // busy if another customer already occupies any covered slot
       const b = busy[a.id] ?? [];
@@ -458,12 +476,12 @@ export default function BookingClient({
       // виняток: вона йде паралельно зі святом (лазертаг 12–13, банкет 12–14).
       if (a.category !== "room") {
         for (const [rs, re] of myBusyRanges) {
-          if (startMin < re && rs < end) return "busy";
+          if (startMin < re && rs < end) return "mineOther";
         }
       }
       return "free";
     },
-    [actDuration, picks, busy, location, myBusyRanges]
+    [actDuration, picks, busy, location, myBusyRanges, coveringPickStart]
   );
 
   const togglePick = (activityId: string, startMin: number) => {
@@ -1195,7 +1213,8 @@ export default function BookingClient({
                       {a.icon} {a.name.toUpperCase()} — {dict.variantTitle.toUpperCase()}
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {[{ id: "", name: dict.variantAny }, ...vars].map((v) => {
+                      {/* «ще не визначилися» — останнім: спершу самі сценарії */}
+                      {[...vars, { id: "", name: dict.variantAny }].map((v) => {
                         const on = sel === v.id;
                         return (
                           <button
@@ -1226,6 +1245,7 @@ export default function BookingClient({
                   <div className="flex flex-wrap items-center gap-4 text-[12px] text-[#888]">
                     <Legend color="#fff" border="#E5E5E5" label={dict.legendFree} />
                     <Legend color={G} label={dict.legendYours} />
+                    <Legend color="#eafbdd" border="#cdf3ab" label={dict.legendYourOther} />
                     <Legend color="#f0f0f0" label={dict.legendBusy} />
                   </div>
                 )}
@@ -1298,6 +1318,34 @@ export default function BookingClient({
                                   </span>
                                   <span className={dense ? "xl:hidden" : "hidden"}>✓</span>
                                 </button>
+                              );
+                            // продовження вже обраного слота: та сама зелена
+                            // смуга без підпису — клік знімає весь слот
+                            if (st === "mineCont")
+                              return (
+                                <button
+                                  key={a.id}
+                                  onClick={() => {
+                                    const from = coveringPickStart(a, m);
+                                    if (from != null) togglePick(a.id, from);
+                                  }}
+                                  className={`min-w-0 rounded-lg ${
+                                    dense ? "min-h-[30px]" : "min-h-[34px]"
+                                  }`}
+                                  style={{ background: G, border: `1px solid ${G}` }}
+                                />
+                              );
+                            // час зайнятий ІНШОЮ вашою розвагою — світло-зелений,
+                            // щоб не плутати з чужою бронню
+                            if (st === "mineOther")
+                              return (
+                                <div
+                                  key={a.id}
+                                  title={dict.legendYourOther}
+                                  className={`min-w-0 rounded-lg border border-[#cdf3ab] bg-[#eafbdd] ${
+                                    dense ? "min-h-[30px]" : "min-h-[34px]"
+                                  }`}
+                                />
                               );
                             if (st === "free")
                               return (
