@@ -55,6 +55,52 @@ async function topUp() {
     });
     console.log("Top-up: banquet duration options widened to 6 hours.");
   }
+
+  // 3. DREAM Yellow: квест більше не ділить арену з лазертагом — окрема
+  //    кімната, тож обидві розваги можуть іти одночасно.
+  const dream = await prisma.location.findUnique({ where: { slug: "dream-yellow" } });
+  const quest = await prisma.activity.findUnique({ where: { key: "quest" } });
+  if (dream && quest) {
+    const existing = await prisma.room.findUnique({
+      where: { locationId_key: { locationId: dream.id, key: "quest" } },
+    });
+    if (!existing) {
+      const last = await prisma.room.findFirst({
+        where: { locationId: dream.id },
+        orderBy: { sortOrder: "desc" },
+      });
+      const questRoom = await prisma.room.create({
+        data: {
+          locationId: dream.id,
+          key: "quest",
+          name: "Квест-кімната",
+          sortOrder: (last?.sortOrder ?? 0) + 1,
+        },
+      });
+      const arena = await prisma.room.findUnique({
+        where: { locationId_key: { locationId: dream.id, key: "arena" } },
+      });
+      if (arena) {
+        // наявні квест-броні переїжджають у нову кімнату, інакше вони й далі
+        // блокували б лазертаг
+        const moved = await prisma.bookingItem.updateMany({
+          where: { activityId: quest.id, roomId: arena.id },
+          data: { roomId: questRoom.id },
+        });
+        await prisma.activityRoom.deleteMany({
+          where: { activityId: quest.id, roomId: arena.id },
+        });
+        await prisma.room.update({
+          where: { id: arena.id },
+          data: { name: "Лазертаг-арена", note: "" },
+        });
+        console.log(`Top-up: DREAM quest room split off (${moved.count} items moved).`);
+      }
+      await prisma.activityRoom.create({
+        data: { activityId: quest.id, roomId: questRoom.id },
+      });
+    }
+  }
 }
 
 async function main() {

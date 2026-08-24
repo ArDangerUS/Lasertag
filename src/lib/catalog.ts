@@ -445,8 +445,8 @@ export const ACTIVITY_VARIANTS: SeedVariant[] = [
 
 // ---------------------------------------------------------------------------
 // Кімнати на локаціях (зі слів клієнта). Розвага займає одну з призначених їй
-// кімнат; розваги зі спільною кімнатою (лазертаг і сценарний на одній арені,
-// квест на арені Дріму) блокують одна одну автоматично.
+// кімнат; розваги зі спільною кімнатою (лазертаг і сценарний на одній арені)
+// блокують одна одну автоматично.
 export type SeedRoom = { loc: string; key: string; name: string; note?: string };
 
 export const ROOMS: SeedRoom[] = [
@@ -464,7 +464,8 @@ export const ROOMS: SeedRoom[] = [
   { loc: "new-way", key: "banquet-kayuta", name: "Банкетна «Каюта»", note: "до 10–12 дітей" },
   { loc: "new-way", key: "banquet-minecraft", name: "Банкетна «Майнкрафт»", note: "до 10–12 дітей" },
   // ---- Дрім ----
-  { loc: "dream-yellow", key: "arena", name: "Лазертаг-арена / квест-зона", note: "арена ділиться на квестову зону" },
+  { loc: "dream-yellow", key: "arena", name: "Лазертаг-арена" },
+  { loc: "dream-yellow", key: "quest", name: "Квест-кімната" },
   { loc: "dream-yellow", key: "papershow", name: "Кімната паперового шоу" },
   { loc: "dream-yellow", key: "banquet", name: "Банкетна кімната", note: "до 20 дітей" },
   // ---- Городок ----
@@ -486,12 +487,12 @@ export const ROOMS: SeedRoom[] = [
   { loc: "gorodok", key: "banquet-potter", name: "Банкетна «Гаррі Поттер»" },
 ];
 
-// activityKey -> room refs "loc:key". Лазертаг і сценарний ділять арени;
-// квест на Дрімі проводиться на арені (ділиться на квестову зону).
+// activityKey -> room refs "loc:key". Лазертаг і сценарний ділять арени.
+// На Дрімі квест має власну кімнату — арену він більше не займає.
 export const ACTIVITY_ROOMS: Record<string, string[]> = {
   laser: ["nyvky:arena", "new-way:arena", "dream-yellow:arena", "gorodok:arena-a", "gorodok:arena-b"],
   scenario: ["nyvky:arena", "new-way:arena", "dream-yellow:arena", "gorodok:arena-a", "gorodok:arena-b"],
-  quest: ["nyvky:quest", "new-way:quest", "dream-yellow:arena", "gorodok:quest"],
+  quest: ["nyvky:quest", "new-way:quest", "dream-yellow:quest", "gorodok:quest"],
   papershow: ["nyvky:papershow", "new-way:papershow", "dream-yellow:papershow"],
   paperneon: ["gorodok:papershow"],
   squid: ["gorodok:squid"],
