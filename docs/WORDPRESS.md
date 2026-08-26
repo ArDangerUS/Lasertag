@@ -17,10 +17,18 @@
 (function () {
   var f = document.getElementById("g75-booking");
 
-  // мова сторінки WordPress → мова форми бронювання.
-  // Для української src не чіпаємо, щоб iframe не вантажився двічі.
-  var lang = (document.documentElement.lang || "uk").slice(0, 2).toLowerCase();
-  if (lang !== "uk" && lang !== "ru" && lang !== "en") lang = "uk";
+  // Мова сторінки → мова форми. Спершу дивимось на адресу (/ru/, /en/) —
+  // Polylang завжди її ставить; якщо префікса немає, беремо атрибут lang
+  // (деякі теми виставляють його неправильно, тому він другим).
+  function detectLang() {
+    var m = location.pathname.toLowerCase().match(/^\/(uk|ru|en)(\/|$)/);
+    if (m) return m[1];
+    var l = (document.documentElement.lang || "").slice(0, 2).toLowerCase();
+    return (l === "ru" || l === "en" || l === "uk") ? l : "uk";
+  }
+
+  var lang = detectLang();
+  // для української src уже правильний — не перезавантажуємо iframe
   if (lang !== "uk") f.src = "https://book.lasertag.in.ua/?embed=1&lang=" + lang;
 
   // висота: сторінка бронювання сама повідомляє свій розмір
@@ -36,6 +44,11 @@
 
 `allow="clipboard-write"` потрібен, щоб у формі працювала дія
 «Скопіювати номер».
+
+**Важливо:** у Polylang кожна мовна версія сторінки — окрема сторінка, і
+вміст між перекладами НЕ копіюється. Цей блок треба вставити на кожній:
+`/book`, `/ru/book`, `/en/book`. Інакше російська сторінка відкриє
+українську форму.
 
 Важливо: у `<iframe>` **не має бути атрибута `sandbox`** — інакше посилання
 «← На основний сайт» усередині форми не зможе вийти з iframe.
