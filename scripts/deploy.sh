@@ -18,7 +18,10 @@ set -u
 
 APP_DIR="${APP_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 BRANCH="${DEPLOY_BRANCH:-main}"
-PORT="${PORT:-3000}"
+# Перевіряємо саме публічну адресу: панель запускає застосунок на власній
+# внутрішній IP (напр. 127.1.9.209), а не на localhost, тож стукати в
+# 127.0.0.1 марно — отримаєш «сайт лежить» при цілком живому сайті.
+HEALTH_URL="${HEALTH_URL:-https://book.lasertag.in.ua/}"
 # cron дає мінімальний PATH — Node тут лежить окремо
 export PATH="/usr/local/node22/bin:$PATH"
 
@@ -88,7 +91,7 @@ log "запит на перезапуск відправлено"
 
 for _ in $(seq 1 30); do
   sleep 2
-  code=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/" || true)
+  code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$HEALTH_URL" || true)
   if [ "$code" = "200" ]; then
     echo "$REMOTE" > "$DEPLOYED_FILE"
     log "сайт піднявся, версія $SHORT"
