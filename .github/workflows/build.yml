@@ -1,13 +1,26 @@
 name: Build for hosting
 
-# Запасний шлях, якщо збірка на shared-хостингу впирається в ліміти:
 # GitHub збирає застосунок і кладе готову теку .next у гілку "prebuilt".
-# На сервері тоді достатньо:
-#   git fetch origin prebuilt && git checkout prebuilt -- .next
+# На хостингу збірка не поміщається в ліміт памʼяті, тому сервер бере
+# готове: scripts/deploy.sh робить
+#   git fetch origin prebuilt && git checkout origin/prebuilt -- .next
+#
+# Повідомлення коміту містить хеш вихідного коду — деплой звіряє його з
+# комітом у main, щоб не викотити новий код зі старою збіркою.
 on:
   workflow_dispatch: {}
   push:
     branches: [main]
+
+# Без цього GITHUB_TOKEN лише на читання, і git push у гілку prebuilt падає.
+permissions:
+  contents: write
+
+# Два пуші поспіль: старий запуск скасовуємо, щоб у prebuilt не лишилась
+# збірка проміжного коміту.
+concurrency:
+  group: prebuilt
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -26,6 +39,8 @@ jobs:
           DATABASE_URL: "file:./build.db"
       - name: Push .next to prebuilt branch
         run: |
+          # .next/cache — кеш збірки, у рантаймі не потрібен і важить сотні МБ
+          rm -rf .next/cache
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git checkout --orphan prebuilt
