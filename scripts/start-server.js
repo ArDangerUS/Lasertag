@@ -39,6 +39,26 @@ setInterval(() => {
   }
 }, 3000).unref();
 
+// Автодеплой: scripts/deploy.sh оновлює код і торкається tmp/restart.txt.
+// Помітивши свіжий файл, коректно завершуємось — Supervisor панелі підніме
+// процес заново вже з новою збіркою. Так деплой не потребує кнопки в панелі.
+const RESTART_FILE = require("path").join(process.cwd(), "tmp", "restart.txt");
+function restartStamp() {
+  try {
+    return require("fs").statSync(RESTART_FILE).mtimeMs;
+  } catch {
+    return 0; // файлу ще немає — нормальний стан
+  }
+}
+let seenRestart = restartStamp();
+setInterval(() => {
+  const now = restartStamp();
+  if (now > seenRestart) {
+    console.log("tmp/restart.txt updated - restarting to pick up the new build");
+    process.exit(0);
+  }
+}, 5000).unref();
+
 const host = cleanHost(process.env.HOST);
 const port = cleanPort(process.env.PORT, process.env.HOST);
 
