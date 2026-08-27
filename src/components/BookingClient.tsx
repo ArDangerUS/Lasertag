@@ -781,9 +781,14 @@ export default function BookingClient({
       {/* Header (sticky, like the main site; compact on phones) */}
       {embed ? (
         // embed-режим (iframe на WordPress): шапка сайту вже є в обгортки —
-        // лишаємо компактне посилання «на основний сайт» і перемикач мови.
+        // лишаємо тільки компактне посилання «на основний сайт».
         // target="_top" обовʼязково: інакше основний сайт відкриється
         // всередині iframe.
+        //
+        // Свого перемикача мови тут НЕМАЄ навмисно: він міняв би мову лише
+        // всередині iframe, а шапка й меню WordPress лишались би старою мовою.
+        // Мову перемикає сайт — і сторінку, і форму разом (мова передається
+        // через ?lang=, див. docs/WORDPRESS.md).
         <div className="flex items-center gap-3 px-4 pt-3 md:px-10">
           <a
             href={homeUrl}
@@ -793,9 +798,6 @@ export default function BookingClient({
             <span aria-hidden="true">←</span>
             {dict.backToSite}
           </a>
-          <div className="ml-auto">
-            <LangDropdown locale={locale} embed />
-          </div>
         </div>
       ) : (
       <header className="sticky top-0 z-50 flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-[#e8e8e8] bg-white px-4 py-2 sm:gap-x-6 sm:py-3 md:px-10">
@@ -1987,12 +1989,13 @@ function DatePicker({
   );
 }
 
-function LangDropdown({ locale, embed = false }: { locale: Locale; embed?: boolean }) {
+// Перемикач мови самої форми. Показується лише при прямому заході на
+// book.lasertag.in.ua — у вбудованому режимі мову задає сайт-обгортка.
+function LangDropdown({ locale }: { locale: Locale }) {
   const [open, setOpen] = useState(false);
   const all: Locale[] = ["uk", "ru", "en"];
   const others = all.filter((l) => l !== locale);
-  // в embed-режимі перемикання мови не має губити ?embed=1
-  const hrefFor = (l: Locale) => `/?lang=${l}${embed ? "&embed=1" : ""}`;
+  const hrefFor = (l: Locale) => `/?lang=${l}`;
   useEffect(() => {
     if (!open) return;
     const close = () => setOpen(false);
