@@ -12,10 +12,28 @@ function todayISO(): string {
   ).padStart(2, "0")}`;
 }
 
+// Адреси мовних версій сторінки-обгортки приходять параметрами alt_uk /
+// alt_ru / alt_en. Значення потрапляє в href, тому пускаємо лише звичайні
+// http(s)-адреси й відносні шляхи — інакше через параметр можна було б
+// підсунути javascript:.
+function safeUrl(raw?: string): string {
+  const s = (raw || "").trim();
+  if (!s) return "";
+  if (/^https?:\/\//i.test(s)) return s;
+  if (s.startsWith("/") && !s.startsWith("//")) return s;
+  return "";
+}
+
 export default async function BookingPage({
   searchParams,
 }: {
-  searchParams: { lang?: string; embed?: string };
+  searchParams: {
+    lang?: string;
+    embed?: string;
+    alt_uk?: string;
+    alt_ru?: string;
+    alt_en?: string;
+  };
 }) {
   const langParam = (searchParams.lang || "").toLowerCase();
   // ?embed=1 — сторінку вбудовано в iframe на WordPress: свою шапку і
@@ -24,6 +42,13 @@ export default async function BookingPage({
   const locale: Locale = (LOCALES as readonly string[]).includes(langParam)
     ? (langParam as Locale)
     : DEFAULT_LOCALE;
+
+  const altUrls = {
+    uk: safeUrl(searchParams.alt_uk),
+    ru: safeUrl(searchParams.alt_ru),
+    en: safeUrl(searchParams.alt_en),
+  };
+  const hasAltUrls = Object.values(altUrls).some(Boolean);
 
   const catalog = await loadPublicCatalog(locale);
   const dict = getDict(locale);
@@ -39,6 +64,7 @@ export default async function BookingPage({
       telegramUrl={process.env.NEXT_PUBLIC_TELEGRAM_URL || "https://t.me/g75lasertag_bot"}
       embed={embed}
       homeUrl={process.env.HOME_URL || "https://lasertag.in.ua"}
+      altUrls={hasAltUrls ? altUrls : undefined}
     />
   );
 }

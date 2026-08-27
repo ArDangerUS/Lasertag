@@ -9,12 +9,16 @@
 
 ```html
 <iframe id="g75-booking"
-  src="https://book.lasertag.in.ua/?embed=1"
   style="width:100%;min-height:100vh;border:0;display:block;"
   allow="clipboard-write"
   title="Онлайн бронювання G-75"></iframe>
+<noscript>
+  <p><a href="https://book.lasertag.in.ua/">Відкрити сторінку бронювання</a></p>
+</noscript>
 <script>
 (function () {
+  var BASE = "https://book.lasertag.in.ua/";
+  var CODES = ["uk", "ru", "en"];
   var f = document.getElementById("g75-booking");
 
   // Мова сторінки → мова форми. Спершу дивимось на адресу (/ru/, /en/) —
@@ -24,12 +28,32 @@
     var m = location.pathname.toLowerCase().match(/^\/(uk|ru|en)(\/|$)/);
     if (m) return m[1];
     var l = (document.documentElement.lang || "").slice(0, 2).toLowerCase();
-    return (l === "ru" || l === "en" || l === "uk") ? l : "uk";
+    return CODES.indexOf(l) !== -1 ? l : "uk";
+  }
+
+  // Адреси мовних версій ЦІЄЇ сторінки. Беремо з тегів hreflang, які
+  // Polylang виводить у <head>, і з посилань його перемикача мов — тож
+  // slug-и ніде не прописані руками й не зламаються при перейменуванні.
+  function collectAlternates() {
+    var out = {};
+    var nodes = document.querySelectorAll(
+      'link[rel="alternate"][hreflang], a[hreflang]'
+    );
+    Array.prototype.forEach.call(nodes, function (n) {
+      var code = (n.getAttribute("hreflang") || "").slice(0, 2).toLowerCase();
+      var href = n.href;
+      if (CODES.indexOf(code) !== -1 && href && !out[code]) out[code] = href;
+    });
+    return out;
   }
 
   var lang = detectLang();
-  // для української src уже правильний — не перезавантажуємо iframe
-  if (lang !== "uk") f.src = "https://book.lasertag.in.ua/?embed=1&lang=" + lang;
+  var qs = "?embed=1" + (lang !== "uk" ? "&lang=" + lang : "");
+  var alts = collectAlternates();
+  CODES.forEach(function (c) {
+    if (alts[c]) qs += "&alt_" + c + "=" + encodeURIComponent(alts[c]);
+  });
+  f.src = BASE + qs;
 
   // висота: сторінка бронювання сама повідомляє свій розмір
   window.addEventListener("message", function (e) {
@@ -44,6 +68,13 @@
 
 `allow="clipboard-write"` потрібен, щоб у формі працювала дія
 «Скопіювати номер».
+
+Параметри `alt_uk` / `alt_ru` / `alt_en` — це адреси мовних версій цієї ж
+сторінки. Завдяки їм перемикач мови у формі веде на відповідну сторінку
+сайту (у батьківському вікні), а не міняє мову лише всередині iframe.
+Адреси беруться з тегів `hreflang` автоматично, тож прописувати slug-и
+руками не треба. Якщо тегів на сторінці немає — перемикач у формі просто
+не показується, решта працює як звичайно.
 
 **Важливо:** у Polylang кожна мовна версія сторінки — окрема сторінка, і
 вміст між перекладами НЕ копіюється. Цей блок треба вставити на кожній:

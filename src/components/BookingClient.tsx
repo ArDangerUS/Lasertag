@@ -29,6 +29,10 @@ type Props = {
   embed?: boolean;
   // куди веде логотип: основний сайт клієнта (HOME_URL) або сама сторінка
   homeUrl?: string;
+  // Адреси мовних версій сторінки-обгортки (embed-режим). Якщо передані,
+  // перемикач мови веде на них у батьківському вікні — міняється і сторінка
+  // WordPress, і форма разом. Без них у embed перемикача немає.
+  altUrls?: Partial<Record<Locale, string>>;
 };
 
 const G = "#56EF02";
@@ -50,6 +54,7 @@ export default function BookingClient({
   telegramUrl,
   embed = false,
   homeUrl = "/",
+  altUrls,
 }: Props) {
   const locations = catalog.locations;
   const [date, setDate] = useState(today);
@@ -785,10 +790,9 @@ export default function BookingClient({
         // target="_top" обовʼязково: інакше основний сайт відкриється
         // всередині iframe.
         //
-        // Свого перемикача мови тут НЕМАЄ навмисно: він міняв би мову лише
-        // всередині iframe, а шапка й меню WordPress лишались би старою мовою.
-        // Мову перемикає сайт — і сторінку, і форму разом (мова передається
-        // через ?lang=, див. docs/WORDPRESS.md).
+        // Перемикач мови тут веде на мовні версії САЙТУ (altUrls) і відкриває
+        // їх у батьківському вікні — інакше змінилась би мова лише всередині
+        // iframe, а шапка й меню WordPress лишились би старою мовою.
         <div className="flex items-center gap-3 px-4 pt-3 md:px-10">
           <a
             href={homeUrl}
@@ -798,6 +802,11 @@ export default function BookingClient({
             <span aria-hidden="true">←</span>
             {dict.backToSite}
           </a>
+          {altUrls && (
+            <div className="ml-auto">
+              <LangDropdown locale={locale} urls={altUrls} />
+            </div>
+          )}
         </div>
       ) : (
       <header className="sticky top-0 z-50 flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-[#e8e8e8] bg-white px-4 py-2 sm:gap-x-6 sm:py-3 md:px-10">
@@ -1989,19 +1998,29 @@ function DatePicker({
   );
 }
 
-// Перемикач мови самої форми. Показується лише при прямому заході на
-// book.lasertag.in.ua — у вбудованому режимі мову задає сайт-обгортка.
-function LangDropdown({ locale }: { locale: Locale }) {
+// Перемикач мови. Без `urls` міняє мову самої форми (прямий захід на
+// book.lasertag.in.ua). З `urls` — це мовні версії сторінки-обгортки:
+// переходимо на них у батьківському вікні, щоб сайт і форма змінили мову
+// разом. Мови без адреси в списку не показуємо.
+function LangDropdown({
+  locale,
+  urls,
+}: {
+  locale: Locale;
+  urls?: Partial<Record<Locale, string>>;
+}) {
   const [open, setOpen] = useState(false);
   const all: Locale[] = ["uk", "ru", "en"];
-  const others = all.filter((l) => l !== locale);
-  const hrefFor = (l: Locale) => `/?lang=${l}`;
+  const others = all.filter((l) => l !== locale && (!urls || urls[l]));
+  const hrefFor = (l: Locale) => urls?.[l] ?? `/?lang=${l}`;
   useEffect(() => {
     if (!open) return;
     const close = () => setOpen(false);
     window.addEventListener("click", close);
     return () => window.removeEventListener("click", close);
   }, [open]);
+
+  if (!others.length) return null; // нема куди перемикати — кнопку не показуємо
 
   return (
     <div className="relative" onClick={(e) => e.stopPropagation()}>
@@ -2018,6 +2037,7 @@ function LangDropdown({ locale }: { locale: Locale }) {
             <a
               key={l}
               href={hrefFor(l)}
+              {...(urls ? { target: "_top" as const } : {})}
               className="block px-3 py-1.5 text-[14px] font-semibold text-brand-ink hover:bg-[#f4f4f4]"
             >
               {l.toUpperCase()}
