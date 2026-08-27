@@ -37,9 +37,14 @@ trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 
 git fetch -q origin "$BRANCH" prebuilt || { log "git fetch не вдався"; exit 1; }
 
-LOCAL=$(git rev-parse HEAD)
+# Орієнтуємось не на стан git, а на те, що реально викочено: інакше
+# достатньо було б комусь зробити `git pull` руками — і скрипт вирішив би,
+# що все свіже, хоча .next лишилась стара й сайт крутить попередню версію.
+# Щоб примусово перевикотити: rm tmp/deployed.sha
+DEPLOYED_FILE="$APP_DIR/tmp/deployed.sha"
+DEPLOYED=$(cat "$DEPLOYED_FILE" 2>/dev/null || echo "")
 REMOTE=$(git rev-parse "origin/$BRANCH")
-[ "$LOCAL" = "$REMOTE" ] && exit 0
+[ "$DEPLOYED" = "$REMOTE" ] && exit 0
 
 # Гілку prebuilt наповнює GitHub Actions, і в повідомленні коміту стоїть
 # хеш вихідного коду. Якщо він не збігається — збірка ще йде (або впала),
@@ -54,18 +59,23 @@ case "$PREBUILT_MSG" in
     ;;
 esac
 
-log "деплой $(git rev-parse --short=7 HEAD) → $SHORT"
+log "деплой ${DEPLOYED:0:7}${DEPLOYED:+ }→ $SHORT"
 
-LOCK_BEFORE=$(git rev-parse "HEAD:package-lock.json" 2>/dev/null || echo "")
 git merge --ff-only "origin/$BRANCH" -q || {
   log "merge не вдався — на сервері є локальні зміни, розберіться вручну"
   exit 1
 }
-LOCK_AFTER=$(git rev-parse "HEAD:package-lock.json" 2>/dev/null || echo "")
 
-if [ "$LOCK_BEFORE" != "$LOCK_AFTER" ]; then
-  log "змінилися залежності — npm ci"
-  npm ci --no-audit --no-fund || { log "npm ci впав"; exit 1; }
+# Залежності доставляємо лише коли реально змінився package-lock.json між
+# викоченою і новою версією. При першому запуску (deployed.sha ще немає)
+# пропускаємо: node_modules ставили руками разом із кодом.
+if [ -n "$DEPLOYED" ]; then
+  LOCK_BEFORE=$(git rev-parse "$DEPLOYED:package-lock.json" 2>/dev/null || echo "")
+  LOCK_AFTER=$(git rev-parse "$REMOTE:package-lock.json" 2>/dev/null || echo "")
+  if [ "$LOCK_BEFORE" != "$LOCK_AFTER" ]; then
+    log "змінилися залежності — npm ci"
+    npm ci --no-audit --no-fund || { log "npm ci впав"; exit 1; }
+  fi
 fi
 
 # Стару .next прибираємо цілком: інакше лишаються шматки попередніх збірок.
@@ -80,6 +90,7 @@ for _ in $(seq 1 30); do
   sleep 2
   code=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/" || true)
   if [ "$code" = "200" ]; then
+    echo "$REMOTE" > "$DEPLOYED_FILE"
     log "сайт піднявся, версія $SHORT"
     exit 0
   fi
