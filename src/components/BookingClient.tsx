@@ -13,6 +13,7 @@ import {
   fmtMoney,
   minToHHMM,
   lasertagMorningDiscount,
+  extraPeopleFee,
 } from "@/lib/pricing";
 
 type Pick = { activityId: string; startMin: number };
@@ -186,14 +187,14 @@ export default function BookingClient({
       const next: Record<string, boolean> = {};
       Object.keys(prev).forEach((id) => {
         const a = actById.get(id);
-        if (a && people <= a.maxPeople) next[id] = true;
+        if (a && (people <= a.maxPeople || a.extraPersonFee > 0)) next[id] = true;
       });
       return Object.keys(next).length === Object.keys(prev).length ? prev : next;
     });
     setPicks((prev) =>
       prev.filter((p) => {
         const a = actById.get(p.activityId);
-        return a && people <= a.maxPeople;
+        return a && (people <= a.maxPeople || a.extraPersonFee > 0);
       })
     );
   }, [people, actById]);
@@ -538,6 +539,15 @@ export default function BookingClient({
         : priceFor(a, null);
       const unit = Math.round(base * factor);
       const discounted = factor < 1;
+      // Понад ліміт розваги (квест: 10) беремо доплату за кожного наступного.
+      // Якщо ставки немає, кількість просто обрізається до ліміту.
+      const extra = extraPeopleFee({
+        people,
+        maxPeople: a.maxPeople,
+        extraPersonFee: a.extraPersonFee,
+      });
+      const cappedPeople =
+        a.extraPersonFee > 0 ? Math.max(1, people) : Math.min(people, a.maxPeople);
       items.push({
         key: `${a.id}|${startMin}|${durationMin}`,
         activityId: a.id,
@@ -546,11 +556,17 @@ export default function BookingClient({
         slotStarts,
         title: a.name,
         icon: a.icon,
-        sub: `${minToHHMM(startMin)}–${minToHHMM(startMin + durationMin)}${discounted ? " · −40%" : ""} · ${
-          a.perPerson ? `${people} × ${fmtMoney(unit)}` : dict.perGroup
-        }`,
-        price: a.perPerson ? unit * Math.max(1, people) : unit,
-        people: a.perPerson ? Math.max(1, people) : Math.min(people, a.maxPeople),
+        sub:
+          `${minToHHMM(startMin)}–${minToHHMM(startMin + durationMin)}${discounted ? " · −40%" : ""} · ` +
+          (a.perPerson ? `${people} × ${fmtMoney(unit)}` : dict.perGroup) +
+          (extra
+            ? ` · ${dict.extraPeopleLine
+                .replace("{c}", String(Math.max(0, people - a.maxPeople)))
+                .replace("{fee}", fmtMoney(a.extraPersonFee))
+                .replace("{n}", String(a.maxPeople))}`
+            : ""),
+        price: (a.perPerson ? unit * Math.max(1, people) : unit) + extra,
+        people: a.perPerson ? Math.max(1, people) : cappedPeople,
       });
     };
 
@@ -1143,7 +1159,9 @@ export default function BookingClient({
                 {locActivities.map((a) => {
                   const on = !!chosen[a.id];
                   const unlimited = a.maxPeople >= 999; // 999 = без обмежень
-                  const overMax = !unlimited && people > a.maxPeople;
+                  // з доплатою більшу групу приймаємо, тож плитку не блокуємо
+                  const overMax = !unlimited && people > a.maxPeople && a.extraPersonFee <= 0;
+                  const overWithFee = !unlimited && people > a.maxPeople && a.extraPersonFee > 0;
                   const rangeLabel = unlimited
                     ? ""
                     : a.minPeople <= 1
@@ -1202,6 +1220,17 @@ export default function BookingClient({
                         )}
                         {rangeLabel && (
                           <span className="block text-[11px] text-[#a5a5a5]">{rangeLabel}</span>
+                        )}
+                        {a.extraPersonFee > 0 && !unlimited && (
+                          <span
+                            className={`mt-1 block text-[11px] ${
+                              overWithFee ? "font-bold text-[#b6791b]" : "text-[#a5a5a5]"
+                            }`}
+                          >
+                            {dict.extraPeopleNote
+                              .replace("{n}", String(a.maxPeople))
+                              .replace("{fee}", fmtMoney(a.extraPersonFee))}
+                          </span>
                         )}
                         {overMax && (
                           <span className="mt-1 block text-[11px] font-bold text-[#b6791b]">

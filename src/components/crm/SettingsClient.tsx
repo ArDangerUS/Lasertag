@@ -37,6 +37,8 @@ type Act = {
   minPeople: number;
   maxPeople: number;
   cleanupMin: number;
+  // грн за кожного учасника понад maxPeople; 0 = більшу групу не приймаємо
+  extraPersonFee: number;
   locations: LocLink[];
   prices: Price[];
 };
@@ -438,11 +440,17 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
   const [names, setNames] = useState({ uk: act.nameUk, ru: act.nameRu, en: act.nameEn });
   // Numeric fields are kept as strings so the user can clear them completely
   // while typing; an empty field falls back to the last saved value.
-  const [saved, setSaved] = useState({ min: act.minPeople, max: act.maxPeople, cleanup: act.cleanupMin });
+  const [saved, setSaved] = useState({
+    min: act.minPeople,
+    max: act.maxPeople,
+    cleanup: act.cleanupMin,
+    extra: act.extraPersonFee,
+  });
   const [group, setGroup] = useState({
     min: String(act.minPeople),
     max: String(act.maxPeople),
     cleanup: String(act.cleanupMin),
+    extra: String(act.extraPersonFee),
   });
   // locationId -> capacity (rooms/arenas at that location)
   const [locCaps, setLocCaps] = useState<Record<string, number>>(
@@ -500,6 +508,7 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
     const min = Math.max(1, parseOr(group.min, saved.min));
     const max = Math.max(1, parseOr(group.max, saved.max));
     const cleanup = parseOr(group.cleanup, saved.cleanup);
+    const extra = parseOr(group.extra, saved.extra);
     setBusy(true);
     try {
       const res = await fetch(`/api/crm/activities/${act.id}`, {
@@ -513,6 +522,7 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
           minPeople: min,
           maxPeople: max,
           cleanupMin: cleanup,
+          extraPersonFee: extra,
           locations: Object.entries(locCaps).map(([locationId, capacity]) => ({
             locationId,
             capacity,
@@ -520,8 +530,13 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
         }),
       });
       if (!res.ok) throw new Error();
-      setSaved({ min, max, cleanup });
-      setGroup({ min: String(min), max: String(max), cleanup: String(cleanup) });
+      setSaved({ min, max, cleanup, extra });
+      setGroup({
+        min: String(min),
+        max: String(max),
+        cleanup: String(cleanup),
+        extra: String(extra),
+      });
       flash("Збережено ✓");
     } catch {
       flash("Помилка");
@@ -761,6 +776,24 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
                 ∞ max
               </span>
             )}
+          </div>
+        </div>
+        <div>
+          <div className="mb-1 text-[11px] font-bold uppercase text-[#777]">Доплата за понадліміт</div>
+          <input
+            type="number"
+            value={group.extra}
+            onChange={(e) => setGroup((g) => ({ ...g, extra: e.target.value }))}
+            onBlur={() =>
+              setGroup((g) => (g.extra.trim() === "" ? { ...g, extra: String(saved.extra) } : g))
+            }
+            className="w-full rounded-lg border border-[#333] bg-[#0e0e0e] px-3 py-2 text-[14px] text-white"
+            title="Грн за кожного учасника понад максимум. 0 = більшу групу не приймаємо"
+          />
+          <div className="mt-1 text-[11px] text-[#777]">
+            {parseInt(group.extra, 10) > 0
+              ? `грн за кожного понад ${group.max}`
+              : "0 = більшу групу не приймаємо"}
           </div>
         </div>
         <div>

@@ -99,6 +99,7 @@ async function main() {
         cleanupMin: a.cleanupMin ?? 0,
         minPeople: a.minPeople,
         maxPeople: a.maxPeople,
+        extraPersonFee: a.extraPersonFee ?? 0,
         sortOrder: a.sortOrder,
         active: !a.hidden,
       },

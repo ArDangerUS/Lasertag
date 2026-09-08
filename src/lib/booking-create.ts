@@ -5,6 +5,7 @@ import {
   makeCode,
   lasertagMorningDiscount,
   usesWeekendRate,
+  extraPeopleFee,
 } from "./pricing";
 import { audit } from "./audit";
 import { pushBookingToKeycrm } from "./keycrm";
@@ -164,7 +165,9 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
   const itemData = input.items.map((it) => {
     const act = actById.get(it.activityId);
     if (!act) throw new Error("Розвагу не знайдено");
-    if (it.people > act.maxPeople) {
+    // Понад ліміт пускаємо лише тих, у кого задана доплата за учасника
+    // (квест: 10 у кімнаті, кожен наступний +500).
+    if (it.people > act.maxPeople && act.extraPersonFee <= 0) {
       throw new Error(`«${act.nameUk}»: максимум ${act.maxPeople} учасників`);
     }
     let unit = it.price;
@@ -216,7 +219,15 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
         unit = Math.round(base * factor);
       }
     }
-    const price = it.price != null ? it.price : act.perPerson ? unit * it.people : unit;
+    const price =
+      it.price != null
+        ? it.price
+        : (act.perPerson ? unit * it.people : unit) +
+          extraPeopleFee({
+            people: it.people,
+            maxPeople: act.maxPeople,
+            extraPersonFee: act.extraPersonFee,
+          });
     const variant = it.variantId ? varById.get(it.variantId) : null;
     if (variant && variant.activityId !== act.id) {
       throw new Error(`«${act.nameUk}»: обраний сценарій належить іншій розвазі`);

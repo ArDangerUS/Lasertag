@@ -116,6 +116,18 @@ export function lasertagMorningDiscount(opts: {
   return 1;
 }
 
+// Доплата за учасників понад ліміт розваги (квест: 10 осіб, +500 за кожного
+// наступного). fee = 0 означає, що більшу групу взагалі не приймаємо, і тоді
+// доплати немає — розвага просто недоступна.
+export function extraPeopleFee(opts: {
+  people: number;
+  maxPeople: number;
+  extraPersonFee: number;
+}): number {
+  if (opts.extraPersonFee <= 0) return 0;
+  return Math.max(0, opts.people - opts.maxPeople) * opts.extraPersonFee;
+}
+
 export function fmtMoney(n: number): string {
   return Math.round(n).toLocaleString("uk-UA").replace(/ /g, " ");
 }

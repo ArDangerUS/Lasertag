@@ -27,6 +27,8 @@ export type SeedActivity = {
   cleanupMin?: number;
   minPeople: number;
   maxPeople: number;
+  // грн за кожного учасника понад maxPeople; 0 = більшу групу не пускаємо
+  extraPersonFee?: number;
   sortOrder: number;
   // true => створена, але прихована з сайту (active=false)
   hidden?: boolean;
@@ -148,6 +150,8 @@ export const ACTIVITIES: SeedActivity[] = [
     cleanupMin: 15, // 15–20 хв на перегрузку; у завантажені дні можна без зазору
     minPeople: 1,
     maxPeople: 10,
+    // у кімнату поміщається 10; більшу групу беремо з доплатою за кожного
+    extraPersonFee: 500,
     sortOrder: 3,
     locations: ALL,
     prices: [{ weekday: 4000, weekend: 5000 }],

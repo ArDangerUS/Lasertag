@@ -33,6 +33,8 @@ export type PubActivity = {
   cleanupMin: number;
   minPeople: number;
   maxPeople: number;
+  // грн за кожного учасника понад maxPeople; 0 = більшу групу не приймаємо
+  extraPersonFee: number;
   sortOrder: number;
   locationIds: string[];
   prices: PubPrice[];
@@ -139,6 +141,7 @@ export async function loadPublicCatalog(locale: Locale): Promise<PublicCatalog> 
       cleanupMin: a.cleanupMin,
       minPeople: a.minPeople,
       maxPeople: a.maxPeople,
+      extraPersonFee: a.extraPersonFee,
       sortOrder: a.sortOrder,
       locationIds: a.locations.map((x) => x.locationId),
       prices: a.prices.map((p) => ({

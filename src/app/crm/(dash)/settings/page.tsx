@@ -49,6 +49,7 @@ export default async function SettingsPage() {
         minPeople: a.minPeople,
         maxPeople: a.maxPeople,
         cleanupMin: a.cleanupMin,
+        extraPersonFee: a.extraPersonFee,
         locations: a.locations.map((x) => ({ locationId: x.locationId, capacity: x.capacity })),
         variants: a.variants.map((v) => ({
           id: v.id,

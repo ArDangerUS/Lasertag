@@ -6,7 +6,7 @@
 // записи, яких раніше не існувало, додаються без чіпання броней і цін.
 import { execSync } from "child_process";
 import { PrismaClient } from "@prisma/client";
-import { ACTIVITY_VARIANTS } from "../src/lib/catalog";
+import { ACTIVITIES, ACTIVITY_VARIANTS } from "../src/lib/catalog";
 
 const prisma = new PrismaClient();
 
@@ -56,7 +56,21 @@ async function topUp() {
     console.log("Top-up: banquet duration options widened to 6 hours.");
   }
 
-  // 3. DREAM Yellow: квест більше не ділить арену з лазертагом — окрема
+  // 3. Доплата за учасників понад ліміт розваги (квест: +500 за кожного).
+  //    Застосовуємо один раз: якщо в жодної розваги ставки ще немає.
+  const withFee = await prisma.activity.count({ where: { extraPersonFee: { gt: 0 } } });
+  if (withFee === 0) {
+    for (const a of ACTIVITIES) {
+      if (!a.extraPersonFee) continue;
+      const updated = await prisma.activity.updateMany({
+        where: { key: a.key },
+        data: { extraPersonFee: a.extraPersonFee },
+      });
+      if (updated.count) console.log(`Top-up: ${a.key} extra person fee = ${a.extraPersonFee}`);
+    }
+  }
+
+  // 4. DREAM Yellow: квест більше не ділить арену з лазертагом — окрема
   //    кімната, тож обидві розваги можуть іти одночасно.
   const dream = await prisma.location.findUnique({ where: { slug: "dream-yellow" } });
   const quest = await prisma.activity.findUnique({ where: { key: "quest" } });

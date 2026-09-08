@@ -92,6 +92,7 @@ export type CrmCatalog = {
     category: string; // game | show | room
     perPerson: boolean;
     maxPeople: number;
+    extraPersonFee: number;
     durationMin: number;
     durationOptions: number[];
     locationIds: string[];
@@ -160,6 +161,7 @@ export async function loadCrmCatalog(): Promise<CrmCatalog> {
       category: a.category,
       perPerson: a.perPerson,
       maxPeople: a.maxPeople,
+      extraPersonFee: a.extraPersonFee,
       durationMin: a.durationMin,
       durationOptions: a.durationOptions ? (JSON.parse(a.durationOptions) as number[]) : [],
       locationIds: a.locations.map((x) => x.locationId),

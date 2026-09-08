@@ -14,6 +14,8 @@ const schema = z.object({
   minPeople: z.number().int().min(1).max(999).optional(),
   maxPeople: z.number().int().min(1).max(999).optional(), // 999 = без обмежень
   cleanupMin: z.number().int().min(0).max(120).optional(),
+  // грн за кожного учасника понад maxPeople; 0 = більшу групу не приймаємо
+  extraPersonFee: z.number().int().min(0).max(100_000).optional(),
   // Full replacement list of locations where the activity is offered, with
   // rooms/arenas count (capacity = parallel groups at that location).
   locations: z
@@ -51,6 +53,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       minPeople: parsed.data.minPeople ?? undefined,
       maxPeople: parsed.data.maxPeople ?? undefined,
       cleanupMin: parsed.data.cleanupMin ?? undefined,
+      extraPersonFee: parsed.data.extraPersonFee ?? undefined,
     },
   });
 
@@ -69,6 +72,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     changes.push(`макс. учасників: ${fmtMax(before.maxPeople)} → ${fmtMax(parsed.data.maxPeople)}`);
   if (parsed.data.cleanupMin != null && parsed.data.cleanupMin !== before.cleanupMin)
     changes.push(`перегрузка: ${before.cleanupMin} → ${parsed.data.cleanupMin} хв`);
+  if (parsed.data.extraPersonFee != null && parsed.data.extraPersonFee !== before.extraPersonFee)
+    changes.push(
+      `доплата за понадліміт: ${before.extraPersonFee} → ${parsed.data.extraPersonFee} грн`
+    );
   if (parsed.data.active != null && parsed.data.active !== before.active)
     changes.push(parsed.data.active ? "увімкнено" : "вимкнено");
 
@@ -128,6 +135,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         minPeople: before.minPeople,
         maxPeople: before.maxPeople,
         cleanupMin: before.cleanupMin,
+        extraPersonFee: before.extraPersonFee,
         active: before.active,
       },
       after: {

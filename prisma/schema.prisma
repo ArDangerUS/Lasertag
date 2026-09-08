@@ -120,6 +120,9 @@ model Activity {
   cleanupMin Int    @default(0)
   minPeople Int     @default(1)
   maxPeople Int     @default(60)
+  // Доплата за кожного учасника ПОНАД maxPeople, грн (квест: 500).
+  // 0 = перевищувати не можна, розвага просто недоступна більшій групі.
+  extraPersonFee Int @default(0)
 
   sortOrder Int     @default(0)
   active    Boolean @default(true)
