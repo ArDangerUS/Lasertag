@@ -9,6 +9,18 @@ import PhoneMenu from "@/components/PhoneMenu";
 
 type Comment = { id: string; authorName: string; text: string; createdAt: string };
 
+// Розвага, дописана в наявну бронь. Ціни тут немає навмисно — її рахує
+// сервер за тарифом, як при створенні броні.
+type NewItem = {
+  key: string;
+  activityId: string;
+  startMin: number;
+  durationMin: number;
+  people: number;
+  roomId?: string;
+  variantId?: string;
+};
+
 export default function BookingEditor({
   booking,
   catalog,
@@ -41,6 +53,17 @@ export default function BookingEditor({
   const [itemVariants, setItemVariants] = useState<Record<string, string>>(
     Object.fromEntries(booking.items.map((i) => [i.id, i.variantId ?? ""]))
   );
+  // час і тривалість кожної позиції — редагуються прямо тут, без календаря
+  const [itemTimes, setItemTimes] = useState<Record<string, { startMin: number; durationMin: number }>>(
+    Object.fromEntries(booking.items.map((i) => [i.id, { startMin: i.startMin, durationMin: i.durationMin }]))
+  );
+  const [itemPeople, setItemPeople] = useState<Record<string, number>>(
+    Object.fromEntries(booking.items.map((i) => [i.id, i.people]))
+  );
+  // позиції, помічені на видалення (зникнуть після «Зберегти»)
+  const [removed, setRemoved] = useState<string[]>([]);
+  // дописані розваги — ціну рахує сервер за тарифом
+  const [added, setAdded] = useState<NewItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   // Внутрішні коментарі менеджерів (окремо від короткого коментаря клієнта)
@@ -97,8 +120,61 @@ export default function BookingEditor({
       .filter(Boolean) as { id: string; name: string }[];
   };
 
+  const locActivities = catalog.activities.filter((a) =>
+    a.locationIds.includes(booking.locationId)
+  );
+  const actById = new Map(catalog.activities.map((a) => [a.id, a]));
+  const loc = catalog.locations.find((l) => l.id === booking.locationId);
+  const startOptions = (() => {
+    const open = loc?.openMin ?? 600;
+    const close = loc?.closeMin ?? 1260;
+    const arr: number[] = [];
+    for (let m = open; m <= close; m += 30) arr.push(m);
+    return arr;
+  })();
+  const durationsFor = (activityId: string, current?: number) => {
+    const a = actById.get(activityId);
+    const base = a?.durationOptions.length ? a.durationOptions : [a?.durationMin ?? 60];
+    return current != null && !base.includes(current)
+      ? [...base, current].sort((x, y) => x - y)
+      : base;
+  };
+  const variantsFor = (activityId: string) =>
+    (actById.get(activityId)?.variants ?? []).filter((v) =>
+      v.locationIds.includes(booking.locationId)
+    );
+
+  function addActivity(activityId: string) {
+    const a = actById.get(activityId);
+    if (!a) return;
+    // нова позиція стартує після кінця останньої, щоб не лізти в чужий час
+    const ends = [
+      ...booking.items.filter((i) => !removed.includes(i.id)).map((i) => {
+        const t = itemTimes[i.id];
+        return (t?.startMin ?? i.startMin) + (t?.durationMin ?? i.durationMin);
+      }),
+      ...added.map((n) => n.startMin + n.durationMin),
+    ];
+    const close = loc?.closeMin ?? 1260;
+    const start = ends.length ? Math.max(...ends) : loc?.openMin ?? 600;
+    setAdded((xs) => [
+      ...xs,
+      {
+        key: `${Date.now()}-${xs.length}`,
+        activityId,
+        startMin: Math.min(start, close - 30),
+        durationMin: a.durationOptions[0] ?? a.durationMin,
+        people: booking.people,
+      },
+    ]);
+  }
+
+  // Сума показує лише те, що вже пораховано: ціну дописаних розваг рахує
+  // сервер за тарифом, тож до збереження вона невідома.
   const total =
-    Object.values(itemPrices).reduce((s, v) => s + (Number(v) || 0), 0) +
+    booking.items
+      .filter((i) => !removed.includes(i.id))
+      .reduce((s, i) => s + (Number(itemPrices[i.id]) || 0), 0) +
     booking.addons.reduce((s, a) => s + a.price, 0);
 
   async function save() {
@@ -114,18 +190,41 @@ export default function BookingEditor({
           customerPhone: phone,
           people,
           prepaidAmount: Number(prepaid) || 0,
-          totalPrice: total,
-          items: booking.items.map((i) => ({
-            id: i.id,
-            price: Number(itemPrices[i.id]) || 0,
-            // send only when the manager changed it (null = зняти кімнату)
-            ...(itemRooms[i.id] !== (i.roomId ?? "")
-              ? { roomId: itemRooms[i.id] || null }
-              : {}),
-            ...(itemVariants[i.id] !== (i.variantId ?? "")
-              ? { variantId: itemVariants[i.id] || null }
-              : {}),
-          })),
+          // totalPrice не шлемо: сервер перерахує суму з позицій і додатків,
+          // інакше ціна дописаних розваг у неї не потрапила б
+          items: booking.items
+            .filter((i) => !removed.includes(i.id))
+            .map((i) => ({
+              id: i.id,
+              price: Number(itemPrices[i.id]) || 0,
+              people: itemPeople[i.id] ?? i.people,
+              // send only when the manager changed it (null = зняти кімнату)
+              ...(itemRooms[i.id] !== (i.roomId ?? "")
+                ? { roomId: itemRooms[i.id] || null }
+                : {}),
+              ...(itemVariants[i.id] !== (i.variantId ?? "")
+                ? { variantId: itemVariants[i.id] || null }
+                : {}),
+              ...(itemTimes[i.id]?.startMin !== i.startMin
+                ? { startMin: itemTimes[i.id].startMin }
+                : {}),
+              ...(itemTimes[i.id]?.durationMin !== i.durationMin
+                ? { durationMin: itemTimes[i.id].durationMin }
+                : {}),
+            })),
+          ...(removed.length ? { removeItemIds: removed } : {}),
+          ...(added.length
+            ? {
+                addItems: added.map((n) => ({
+                  activityId: n.activityId,
+                  startMin: n.startMin,
+                  durationMin: n.durationMin,
+                  people: n.people,
+                  ...(n.roomId ? { roomId: n.roomId } : {}),
+                  ...(n.variantId ? { variantId: n.variantId } : {}),
+                })),
+              }
+            : {}),
         }),
       });
       const data = await res.json();
@@ -250,36 +349,93 @@ export default function BookingEditor({
           </div>
         </div>
 
-        {/* items with editable prices */}
+        {/* Розваги: час, тривалість, кімната, сценарій, ціна — усе тут */}
         <div>
           <Label>Розваги та ціни</Label>
+
+          {canWrite && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {locActivities.map((a) => (
+                <button
+                  key={a.id}
+                  onClick={() => addActivity(a.id)}
+                  className="rounded-full border border-[#333] bg-[#0e0e0e] px-3 py-1.5 text-[12px] font-semibold text-[#bbb] transition hover:border-[#56EF02] hover:text-white"
+                >
+                  {a.icon} {a.name} +
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="flex flex-col gap-2">
             {booking.items.map((i) => {
               const rooms = roomOptions(i.activityId);
-              const variants = (
-                catalog.activities.find((a) => a.id === i.activityId)?.variants ?? []
-              ).filter((v) => v.locationIds.includes(booking.locationId));
+              const variants = variantsFor(i.activityId);
+              const gone = removed.includes(i.id);
+              const t = itemTimes[i.id] ?? { startMin: i.startMin, durationMin: i.durationMin };
               return (
-                <div key={i.id} className="flex flex-wrap items-center gap-3 rounded-xl bg-[#0e0e0e] px-3 py-2.5">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13px] font-semibold">
+                <div
+                  key={i.id}
+                  className={`flex flex-wrap items-center gap-2 rounded-xl bg-[#0e0e0e] px-3 py-2.5 ${
+                    gone ? "opacity-40" : ""
+                  }`}
+                >
+                  <div className="min-w-[130px] flex-1">
+                    <div className={`text-[13px] font-semibold ${gone ? "line-through" : ""}`}>
                       {i.title}
                       {i.variantName && (
                         <span className="ml-1.5 font-normal text-[#56EF02]">«{i.variantName}»</span>
                       )}
                     </div>
-                    <div className="text-[11px] text-[#888]">
-                      {minToHHMM(i.startMin)}–{minToHHMM(i.startMin + i.durationMin)} · {i.people} ос
-                      {!rooms.length && i.roomName ? ` · ${i.roomName}` : ""}
-                    </div>
+                    {!rooms.length && i.roomName && (
+                      <div className="text-[11px] text-[#888]">{i.roomName}</div>
+                    )}
                   </div>
-                  {/* сценарій (квести): на ціну й зайнятість не впливає */}
+
+                  <select
+                    value={t.startMin}
+                    disabled={!canWrite || gone}
+                    onChange={(e) =>
+                      setItemTimes((m) => ({
+                        ...m,
+                        [i.id]: { ...t, startMin: Number(e.target.value) },
+                      }))
+                    }
+                    className="rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white disabled:opacity-50"
+                    title="Час початку"
+                  >
+                    {startOptions.map((m) => (
+                      <option key={m} value={m}>
+                        {minToHHMM(m)}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={t.durationMin}
+                    disabled={!canWrite || gone}
+                    onChange={(e) =>
+                      setItemTimes((m) => ({
+                        ...m,
+                        [i.id]: { ...t, durationMin: Number(e.target.value) },
+                      }))
+                    }
+                    className="rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white disabled:opacity-50"
+                    title="Тривалість"
+                  >
+                    {durationsFor(i.activityId, t.durationMin).map((d) => (
+                      <option key={d} value={d}>
+                        {d >= 60 ? `${d / 60} год` : `${d} хв`}
+                      </option>
+                    ))}
+                  </select>
+
                   {variants.length > 0 && (
                     <select
                       value={itemVariants[i.id] ?? ""}
-                      disabled={!canWrite}
+                      disabled={!canWrite || gone}
                       onChange={(e) => setItemVariants((m) => ({ ...m, [i.id]: e.target.value }))}
-                      className="max-w-[190px] rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[12px] text-white"
+                      className="max-w-[170px] rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[12px] text-white disabled:opacity-50"
                       title="Сценарій"
                     >
                       <option value="">сценарій: не обрано</option>
@@ -290,13 +446,13 @@ export default function BookingEditor({
                       ))}
                     </select>
                   )}
-                  {/* Manager can pin a specific room (validated server-side) */}
+
                   {rooms.length > 0 && (
                     <select
                       value={itemRooms[i.id] ?? ""}
-                      disabled={!canWrite}
+                      disabled={!canWrite || gone}
                       onChange={(e) => setItemRooms((m) => ({ ...m, [i.id]: e.target.value }))}
-                      className="max-w-[190px] rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[12px] text-white"
+                      className="max-w-[170px] rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[12px] text-white disabled:opacity-50"
                       title="Кімната"
                     >
                       <option value="">кімната: авто</option>
@@ -307,21 +463,154 @@ export default function BookingEditor({
                       ))}
                     </select>
                   )}
+
+                  <input
+                    type="number"
+                    min={1}
+                    value={itemPeople[i.id] ?? i.people}
+                    disabled={!canWrite || gone}
+                    onChange={(e) =>
+                      setItemPeople((m) => ({ ...m, [i.id]: Math.max(1, Number(e.target.value) || 1) }))
+                    }
+                    className="w-16 rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white disabled:opacity-50"
+                    title="учасників"
+                  />
+
                   <div className="flex items-center gap-1">
                     <input
                       type="number"
                       value={itemPrices[i.id]}
-                      disabled={!canWrite}
+                      disabled={!canWrite || gone}
                       onChange={(e) =>
                         setItemPrices((p) => ({ ...p, [i.id]: Number(e.target.value) || 0 }))
                       }
-                      className="w-24 rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-right text-[13px] text-white"
+                      className="w-24 rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-right text-[13px] text-white disabled:opacity-50"
+                      title="ціна"
                     />
                     <span className="text-[12px] text-[#888]">грн</span>
                   </div>
+
+                  {canWrite && (
+                    <button
+                      onClick={() =>
+                        setRemoved((r) => (gone ? r.filter((x) => x !== i.id) : [...r, i.id]))
+                      }
+                      className="h-7 w-7 rounded-full bg-[#2a2a2a] text-[#bbb]"
+                      title={gone ? "Повернути" : "Прибрати розвагу"}
+                    >
+                      {gone ? "↺" : "✕"}
+                    </button>
+                  )}
                 </div>
               );
             })}
+
+            {/* дописані розваги — ціну порахує сервер після збереження */}
+            {added.map((n, idx) => {
+              const rooms = roomOptions(n.activityId);
+              const variants = variantsFor(n.activityId);
+              const patch = (p: Partial<NewItem>) =>
+                setAdded((xs) => xs.map((x, k) => (k === idx ? { ...x, ...p } : x)));
+              return (
+                <div
+                  key={n.key}
+                  className="flex flex-wrap items-center gap-2 rounded-xl border border-[#56EF02]/40 bg-[#56EF02]/10 px-3 py-2.5"
+                >
+                  <select
+                    value={n.activityId}
+                    onChange={(e) => {
+                      const a = actById.get(e.target.value);
+                      patch({
+                        activityId: e.target.value,
+                        durationMin: a?.durationOptions[0] ?? a?.durationMin ?? 60,
+                        roomId: undefined,
+                        variantId: undefined,
+                      });
+                    }}
+                    className="min-w-[130px] flex-1 rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
+                  >
+                    {locActivities.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.icon} {a.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={n.startMin}
+                    onChange={(e) => patch({ startMin: Number(e.target.value) })}
+                    className="rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
+                  >
+                    {startOptions.map((m) => (
+                      <option key={m} value={m}>
+                        {minToHHMM(m)}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={n.durationMin}
+                    onChange={(e) => patch({ durationMin: Number(e.target.value) })}
+                    className="rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
+                  >
+                    {durationsFor(n.activityId, n.durationMin).map((d) => (
+                      <option key={d} value={d}>
+                        {d >= 60 ? `${d / 60} год` : `${d} хв`}
+                      </option>
+                    ))}
+                  </select>
+
+                  {variants.length > 0 && (
+                    <select
+                      value={n.variantId ?? ""}
+                      onChange={(e) => patch({ variantId: e.target.value || undefined })}
+                      className="max-w-[170px] rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[12px] text-white"
+                    >
+                      <option value="">сценарій: не обрано</option>
+                      {variants.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {rooms.length > 0 && (
+                    <select
+                      value={n.roomId ?? ""}
+                      onChange={(e) => patch({ roomId: e.target.value || undefined })}
+                      className="max-w-[170px] rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[12px] text-white"
+                    >
+                      <option value="">кімната: авто</option>
+                      {rooms.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  <input
+                    type="number"
+                    min={1}
+                    value={n.people}
+                    onChange={(e) => patch({ people: Math.max(1, Number(e.target.value) || 1) })}
+                    className="w-16 rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
+                    title="учасників"
+                  />
+                  <span className="text-[12px] text-[#888]">ціна: авто</span>
+
+                  <button
+                    onClick={() => setAdded((xs) => xs.filter((_, k) => k !== idx))}
+                    className="h-7 w-7 rounded-full bg-[#2a2a2a] text-[#bbb]"
+                    title="Прибрати"
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })}
+
             {booking.addons.map((a) => (
               <div key={a.id} className="flex items-center justify-between rounded-xl bg-[#0e0e0e] px-3 py-2 text-[13px]">
                 <span className="text-[#ccc]">
@@ -331,6 +620,12 @@ export default function BookingEditor({
               </div>
             ))}
           </div>
+
+          {(added.length > 0 || removed.length > 0) && (
+            <p className="mt-2 text-[11px] text-[#b6791b]">
+              Зміни застосуються після «Зберегти». Сума перерахується автоматично.
+            </p>
+          )}
         </div>
 
         {/* Внутрішні коментарі менеджерів */}
@@ -396,7 +691,14 @@ export default function BookingEditor({
         )}
 
         <div className="flex items-center justify-between border-t border-[#2a2a2a] pt-3">
-          <span className="text-[14px] text-[#aaa]">Разом</span>
+          <span className="text-[14px] text-[#aaa]">
+            Разом
+            {added.length > 0 && (
+              <span className="ml-2 text-[12px] text-[#b6791b]">
+                + {added.length} нов{added.length === 1 ? "а" : "і"} за тарифом
+              </span>
+            )}
+          </span>
           <span className="text-[22px] font-extrabold text-[#56EF02]">{fmtMoney(total)} грн</span>
         </div>
 

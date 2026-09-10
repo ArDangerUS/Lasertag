@@ -1,12 +1,6 @@
 import { prisma } from "./prisma";
-import {
-  resolvePrice,
-  tieredBlockPrice,
-  makeCode,
-  lasertagMorningDiscount,
-  usesWeekendRate,
-  extraPeopleFee,
-} from "./pricing";
+import { makeCode, usesWeekendRate } from "./pricing";
+import { computeItemPrice } from "./item-price";
 import { audit } from "./audit";
 import { pushBookingToKeycrm } from "./keycrm";
 import type { SessionUser } from "./auth";
@@ -170,63 +164,17 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
     if (it.people > act.maxPeople && act.extraPersonFee <= 0) {
       throw new Error(`«${act.nameUk}»: максимум ${act.maxPeople} учасників`);
     }
-    let unit = it.price;
-    if (unit == null) {
-      const rows = act.prices.map((p) => ({
-        locationId: p.locationId,
-        durationMin: p.durationMin,
-        priceWeekday: p.priceWeekday,
-        priceWeekend: p.priceWeekend,
-      }));
-      const factor = lasertagMorningDiscount({
-        activityKey: act.key,
-        locationSlug: location.slug,
-        date: input.date,
-        startMin: it.startMin,
-        durationMin: it.durationMin,
-      });
-      if (act.durationOptions) {
-        // Flexible 30-min-slot activity: merged blocks price as hours + half.
-        if (factor < 1 && it.durationMin > 60) {
-          // Discount covers only the first hour (10:00–11:00); the remainder
-          // is priced normally.
-          const firstHour = tieredBlockPrice(rows, {
-            locationId: input.locationId,
-            date: input.date,
-            durationMin: 60,
-          });
-          const rest = tieredBlockPrice(rows, {
-            locationId: input.locationId,
-            date: input.date,
-            durationMin: it.durationMin - 60,
-          });
-          unit = Math.round(firstHour * factor) + rest;
-        } else {
-          const base = tieredBlockPrice(rows, {
-            locationId: input.locationId,
-            date: input.date,
-            durationMin: it.durationMin,
-          });
-          unit = Math.round(base * factor);
-        }
-      } else {
-        const base =
-          resolvePrice(rows, {
-            locationId: input.locationId,
-            durationMin: null,
-            date: input.date,
-          }) ?? 0;
-        unit = Math.round(base * factor);
-      }
-    }
     const price =
       it.price != null
         ? it.price
-        : (act.perPerson ? unit * it.people : unit) +
-          extraPeopleFee({
+        : computeItemPrice({
+            act,
+            locationId: input.locationId,
+            locationSlug: location.slug,
+            date: input.date,
+            startMin: it.startMin,
+            durationMin: it.durationMin,
             people: it.people,
-            maxPeople: act.maxPeople,
-            extraPersonFee: act.extraPersonFee,
           });
     const variant = it.variantId ? varById.get(it.variantId) : null;
     if (variant && variant.activityId !== act.id) {
