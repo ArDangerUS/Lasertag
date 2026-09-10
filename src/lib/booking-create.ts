@@ -152,7 +152,12 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
     for (const r of rooms) {
       if (isFree(r.room.id)) return occupy(r.room.id);
     }
-    throw new Error(`«${act.nameUk}»: немає вільної кімнати на цей час — оберіть інший час`);
+    throw new Error(
+      `«${act.nameUk}»: немає вільної кімнати на цей час` +
+        (act.cleanupMin > 0
+          ? ` — після попереднього сеансу потрібно ${act.cleanupMin} хв на перезавантаження`
+          : " — оберіть інший час")
+    );
   };
 
   // Build item rows with snapshot titles + resolved prices.

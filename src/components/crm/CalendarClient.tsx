@@ -633,12 +633,16 @@ function ActivityDayGrid({
               // occupancy = rooms taken at minute m: items of ANY activity that
               // sit in one of this activity's rooms (спільна арена лазертаг/
               // сценарний) + roomless items of this activity (legacy)
+              // Технічна перерва після сеансу теж тримає кімнату: квест
+              // 11:00–12:00 з перервою 15 хв звільняє її лише о 12:15.
+              const cleanupOf = (activityId: string) =>
+                catalog.activities.find((x) => x.id === activityId)?.cleanupMin ?? 0;
               const busyAt = (m: number) => {
                 const overlapping = entries.filter(
                   (e) =>
                     e.b.status !== "CANCELLED" &&
                     e.it.startMin <= m &&
-                    e.it.startMin + e.it.durationMin > m
+                    e.it.startMin + e.it.durationMin + cleanupOf(e.it.activityId) > m
                 );
                 const takenRooms = new Set(
                   overlapping

@@ -272,7 +272,14 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
           throw new Error(`${label}: обрана кімната не підходить для цієї розваги`);
         }
         const free = ordered.find((r) => !(roomBusy.get(r.id) ?? []).some((b) => overlaps(b, iv)));
-        if (!free) throw new Error(`${label}: усі кімнати/арени зайняті на цей час`);
+        if (!free) {
+          throw new Error(
+            `${label}: усі кімнати/арени зайняті на цей час` +
+              (act.cleanupMin > 0
+                ? ` — після попереднього сеансу потрібно ${act.cleanupMin} хв на перезавантаження`
+                : "")
+          );
+        }
         push(roomBusy, free.id, iv);
         return free.id;
       }
