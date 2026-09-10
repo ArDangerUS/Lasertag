@@ -6,7 +6,7 @@
 // записи, яких раніше не існувало, додаються без чіпання броней і цін.
 import { execSync } from "child_process";
 import { PrismaClient } from "@prisma/client";
-import { ACTIVITIES, ACTIVITY_VARIANTS } from "../src/lib/catalog";
+import { ACTIVITIES, ACTIVITY_ROOMS, ACTIVITY_VARIANTS } from "../src/lib/catalog";
 
 const prisma = new PrismaClient();
 
@@ -70,7 +70,96 @@ async function topUp() {
     }
   }
 
-  // 4. DREAM Yellow: квест більше не ділить арену з лазертагом — окрема
+  // 4. Нові розваги з каталогу, яких у базі ще немає (шоу-програми,
+  //    майстер-класи). Наявні не чіпаємо — їх могли редагувати в CRM.
+  const known = new Set((await prisma.activity.findMany({ select: { key: true } })).map((a) => a.key));
+  const missing = ACTIVITIES.filter((a) => !known.has(a.key));
+  if (missing.length) {
+    const locs = await prisma.location.findMany({ select: { id: true, slug: true } });
+    const locBySlug = Object.fromEntries(locs.map((l) => [l.slug, l.id]));
+    const rooms = await prisma.room.findMany({ select: { id: true, key: true, locationId: true } });
+    const roomByRef = Object.fromEntries(
+      rooms.map((r) => {
+        const slug = locs.find((l) => l.id === r.locationId)?.slug ?? "";
+        return [`${slug}:${r.key}`, r.id];
+      })
+    );
+    for (const a of missing) {
+      const act = await prisma.activity.create({
+        data: {
+          id: `act-${a.key}`,
+          key: a.key,
+          category: a.category,
+          nameUk: a.nameUk,
+          nameRu: a.nameRu,
+          nameEn: a.nameEn,
+          descUk: a.descUk,
+          descRu: a.descRu,
+          descEn: a.descEn,
+          icon: a.icon,
+          perPerson: a.perPerson,
+          durationMin: a.durationMin,
+          durationOptions: a.durationOptions ? JSON.stringify(a.durationOptions) : "",
+          cleanupMin: a.cleanupMin ?? 0,
+          minPeople: a.minPeople,
+          maxPeople: a.maxPeople,
+          extraPersonFee: a.extraPersonFee ?? 0,
+          crmOnly: a.crmOnly ?? false,
+          sortOrder: a.sortOrder,
+          active: !a.hidden,
+          locations: {
+            create: a.locations
+              .filter((slug) => locBySlug[slug])
+              .map((slug) => ({
+                locationId: locBySlug[slug],
+                capacity: a.capacities?.[slug] ?? 1,
+              })),
+          },
+          prices: {
+            create: a.prices.map((p) => ({
+              locationId: p.locationSlug ? locBySlug[p.locationSlug] : null,
+              durationMin: p.durationMin ?? null,
+              priceWeekday: p.weekday,
+              priceWeekend: p.weekend,
+            })),
+          },
+          rooms: {
+            create: (ACTIVITY_ROOMS[a.key] ?? [])
+              .filter((ref) => roomByRef[ref])
+              .map((ref) => ({ roomId: roomByRef[ref] })),
+          },
+        },
+      });
+      console.log(`Top-up: added activity ${act.key}`);
+    }
+  }
+
+  // 5. Кімнати сценаріїв: «Хованки» проводяться на лазертаг-арені, а не в
+  //    квест-кімнаті, тож займають саме арену.
+  const variantRooms = await prisma.activityVariantRoom.count();
+  if (variantRooms === 0) {
+    const locs2 = await prisma.location.findMany({ select: { id: true, slug: true } });
+    const rooms2 = await prisma.room.findMany({ select: { id: true, key: true, locationId: true } });
+    const refOf = (r: { key: string; locationId: string }) =>
+      `${locs2.find((l) => l.id === r.locationId)?.slug ?? ""}:${r.key}`;
+    let links = 0;
+    for (const v of ACTIVITY_VARIANTS) {
+      if (!v.roomRefs?.length) continue;
+      const variant = await prisma.activityVariant.findUnique({ where: { key: v.key } });
+      if (!variant) continue;
+      for (const ref of v.roomRefs) {
+        const room = rooms2.find((r) => refOf(r) === ref);
+        if (!room) continue;
+        await prisma.activityVariantRoom.create({
+          data: { variantId: variant.id, roomId: room.id },
+        });
+        links++;
+      }
+    }
+    if (links) console.log(`Top-up: ${links} variant-room links (Хованки → арена).`);
+  }
+
+  // 6. DREAM Yellow: квест більше не ділить арену з лазертагом — окрема
   //    кімната, тож обидві розваги можуть іти одночасно.
   const dream = await prisma.location.findUnique({ where: { slug: "dream-yellow" } });
   const quest = await prisma.activity.findUnique({ where: { key: "quest" } });

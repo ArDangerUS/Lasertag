@@ -16,6 +16,8 @@ const schema = z.object({
   cleanupMin: z.number().int().min(0).max(120).optional(),
   // грн за кожного учасника понад maxPeople; 0 = більшу групу не приймаємо
   extraPersonFee: z.number().int().min(0).max(100_000).optional(),
+  // true = лише для CRM, на сайті бронювання не показується
+  crmOnly: z.boolean().optional(),
   // Full replacement list of locations where the activity is offered, with
   // rooms/arenas count (capacity = parallel groups at that location).
   locations: z
@@ -54,6 +56,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       maxPeople: parsed.data.maxPeople ?? undefined,
       cleanupMin: parsed.data.cleanupMin ?? undefined,
       extraPersonFee: parsed.data.extraPersonFee ?? undefined,
+      crmOnly: parsed.data.crmOnly ?? undefined,
     },
   });
 
@@ -76,6 +79,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     changes.push(
       `доплата за понадліміт: ${before.extraPersonFee} → ${parsed.data.extraPersonFee} грн`
     );
+  if (parsed.data.crmOnly != null && parsed.data.crmOnly !== before.crmOnly)
+    changes.push(parsed.data.crmOnly ? "прихована з сайту (лише CRM)" : "показується на сайті");
   if (parsed.data.active != null && parsed.data.active !== before.active)
     changes.push(parsed.data.active ? "увімкнено" : "вимкнено");
 

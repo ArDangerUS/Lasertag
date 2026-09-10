@@ -95,6 +95,8 @@ export type CrmCatalog = {
     extraPersonFee: number;
     // технічна перерва після сеансу (квест: 15 хв на перезбирання кімнати)
     cleanupMin: number;
+    // true = лише для CRM, на сайті бронювання не показується
+    crmOnly: boolean;
     durationMin: number;
     durationOptions: number[];
     locationIds: string[];
@@ -165,6 +167,7 @@ export async function loadCrmCatalog(): Promise<CrmCatalog> {
       maxPeople: a.maxPeople,
       extraPersonFee: a.extraPersonFee,
       cleanupMin: a.cleanupMin,
+      crmOnly: a.crmOnly,
       durationMin: a.durationMin,
       durationOptions: a.durationOptions ? (JSON.parse(a.durationOptions) as number[]) : [],
       locationIds: a.locations.map((x) => x.locationId),

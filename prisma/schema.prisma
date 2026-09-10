@@ -17,27 +17,27 @@ datasource db {
 // ---------------------------------------------------------------------------
 
 model Location {
-  id        String   @id @default(cuid())
-  slug      String   @unique // nyvky, gorodok, new-way, dream-yellow, mobile
-  name      String // "Нивки G-75"
-  address   String   @default("")
+  id           String  @id @default(cuid())
+  slug         String  @unique // nyvky, gorodok, new-way, dream-yellow, mobile
+  name         String // "Нивки G-75"
+  address      String  @default("")
   // Working hours in minutes from midnight. Guests may pre-book earlier/later.
-  openMin   Int      @default(600) // 10:00
-  closeMin  Int      @default(1260) // 21:00
-  isMobile  Boolean  @default(false) // виїзний формат
+  openMin      Int     @default(600) // 10:00
+  closeMin     Int     @default(1260) // 21:00
+  isMobile     Boolean @default(false) // виїзний формат
   // How many banquet rooms exist at this location (parallel bookings limit)
-  banquetRooms Int   @default(0)
+  banquetRooms Int     @default(0)
   hasShowRoom  Boolean @default(false) // dedicated room for show programs (Городок)
-  sortOrder Int      @default(0)
-  active    Boolean  @default(true)
+  sortOrder    Int     @default(0)
+  active       Boolean @default(true)
 
   activities LocationActivity[]
   packages   PackageLocation[]
   variants   ActivityVariantLocation[]
   bookings   Booking[]
   rooms      Room[]
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime                  @default(now())
+  updatedAt  DateTime                  @updatedAt
 }
 
 // A physical room/zone at a location (лазертаг-арена, банкетна «Майнкрафт»…).
@@ -49,11 +49,12 @@ model Room {
   locationId String
   key        String // unique within location, e.g. "arena-a", "banquet-minecraft"
   name       String // "Банкетна «Майнкрафт»"
-  note       String  @default("") // "до 10–12 дітей"
-  sortOrder  Int     @default(0)
-  active     Boolean @default(true)
+  note       String   @default("") // "до 10–12 дітей"
+  sortOrder  Int      @default(0)
+  active     Boolean  @default(true)
 
   activities ActivityRoom[]
+  variants   ActivityVariantRoom[]
   items      BookingItem[]
 
   @@unique([locationId, key])
@@ -74,7 +75,20 @@ model ActivityVariant {
   active     Boolean  @default(true)
 
   locations ActivityVariantLocation[]
+  // Сценарій може йти в іншій кімнаті, ніж сама розвага: «Хованки» — це
+  // квест, але проводиться на лазертаг-арені. Порожньо = кімнати розваги.
+  rooms     ActivityVariantRoom[]
   items     BookingItem[]
+}
+
+model ActivityVariantRoom {
+  id        String          @id @default(cuid())
+  variant   ActivityVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  variantId String
+  room      Room            @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  roomId    String
+
+  @@unique([variantId, roomId])
 }
 
 model ActivityVariantLocation {
@@ -98,44 +112,47 @@ model ActivityRoom {
 }
 
 model Activity {
-  id        String  @id @default(cuid())
-  key       String  @unique // laser, scenario, quest, papershow, banquet, maze, ...
-  category  String  @default("game") // game | show | room | package
+  id       String @id @default(cuid())
+  key      String @unique // laser, scenario, quest, papershow, banquet, maze, ...
+  category String @default("game") // game | show | room | package
   // Localised names
-  nameUk    String
-  nameRu    String  @default("")
-  nameEn    String  @default("")
-  descUk    String  @default("")
-  descRu    String  @default("")
-  descEn    String  @default("")
-  icon      String  @default("🎯")
-  photo     String  @default("") // /uploads/... or remote url
+  nameUk   String
+  nameRu   String @default("")
+  nameEn   String @default("")
+  descUk   String @default("")
+  descRu   String @default("")
+  descEn   String @default("")
+  icon     String @default("🎯")
+  photo    String @default("") // /uploads/... or remote url
 
-  perPerson Boolean @default(false) // price is per participant vs per group
+  perPerson       Boolean @default(false) // price is per participant vs per group
   // For fixed-duration activities. Lasertag uses durationOptions instead.
-  durationMin Int   @default(60)
+  durationMin     Int     @default(60)
   // JSON array of allowed durations in minutes, e.g. "[30,60]" for lasertag.
-  durationOptions String @default("")
+  durationOptions String  @default("")
   // Cleanup/turnaround buffer after the activity (minutes). Quests may set 0-20.
-  cleanupMin Int    @default(0)
-  minPeople Int     @default(1)
-  maxPeople Int     @default(60)
+  cleanupMin      Int     @default(0)
+  // true = послуга лише для CRM: на сайті бронювання її не видно, менеджер
+  // домовляється по телефону (шоу-програми, майстер-класи).
+  crmOnly         Boolean @default(false)
+  minPeople       Int     @default(1)
+  maxPeople       Int     @default(60)
   // Доплата за кожного учасника ПОНАД maxPeople, грн (квест: 500).
   // 0 = перевищувати не можна, розвага просто недоступна більшій групі.
-  extraPersonFee Int @default(0)
+  extraPersonFee  Int     @default(0)
 
   sortOrder Int     @default(0)
   active    Boolean @default(true)
 
-  locations LocationActivity[]
+  locations    LocationActivity[]
   packageItems PackageItem[]
   bookingItems BookingItem[]
-  prices    ActivityPrice[]
-  rooms     ActivityRoom[]
-  variants  ActivityVariant[]
-  photoBlob ActivityPhotoBlob?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  prices       ActivityPrice[]
+  rooms        ActivityRoom[]
+  variants     ActivityVariant[]
+  photoBlob    ActivityPhotoBlob?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 }
 
 // Join: which activities are offered at which location. `capacity` = how many
@@ -158,11 +175,11 @@ model LocationActivity {
 // durationMin null = single-duration activity. For lasertag we store one row per
 // (location?, duration) pair. weekday vs weekend captured in two columns.
 model ActivityPrice {
-  id          String  @id @default(cuid())
-  activity    Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
-  activityId  String
-  locationId  String? // null => applies to all locations unless overridden
-  durationMin Int? // null => activity's fixed duration
+  id           String   @id @default(cuid())
+  activity     Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  activityId   String
+  locationId   String? // null => applies to all locations unless overridden
+  durationMin  Int? // null => activity's fixed duration
   priceWeekday Int
   priceWeekend Int
 
@@ -181,23 +198,23 @@ model ActivityPhotoBlob {
 }
 
 model Addon {
-  id       String  @id @default(cuid())
-  key      String  @unique
-  nameUk   String
-  nameRu   String  @default("")
-  nameEn   String  @default("")
-  subUk    String  @default("")
-  subRu    String  @default("")
-  subEn    String  @default("")
+  id            String          @id @default(cuid())
+  key           String          @unique
+  nameUk        String
+  nameRu        String          @default("")
+  nameEn        String          @default("")
+  subUk         String          @default("")
+  subRu         String          @default("")
+  subEn         String          @default("")
   // price 0 => "ціна уточнюється" (cake, merch)
-  price    Int
+  price         Int
   // JSON map of qty->price for tiered addons (photographer hours):
   // {"1":2500,"2":4000,"3":5500}. Empty = flat price*qty.
-  tiers    String  @default("")
-  sortOrder Int    @default(0)
-  active   Boolean @default(true)
+  tiers         String          @default("")
+  sortOrder     Int             @default(0)
+  active        Boolean         @default(true)
   bookingAddons BookingAddon[]
-  photoBlob AddonPhotoBlob?
+  photoBlob     AddonPhotoBlob?
 }
 
 // Uploaded addon photo (same idea as ActivityPhotoBlob): bytes live in the
@@ -213,33 +230,33 @@ model AddonPhotoBlob {
 // A complex offer / bundle (e.g. "Комплекс Сталкер"): an ordered list of
 // activities that get booked in sequence (quest → lasertag → paper show → banquet).
 model Package {
-  id        String  @id @default(cuid())
-  key       String  @unique
+  id                String            @id @default(cuid())
+  key               String            @unique
   // Комплекс може продаватися на кількох локаціях (той самий склад і ціни).
-  locations PackageLocation[]
-  nameUk    String
-  nameRu    String  @default("")
-  nameEn    String  @default("")
-  descUk    String  @default("")
-  descRu    String  @default("")
-  descEn    String  @default("")
+  locations         PackageLocation[]
+  nameUk            String
+  nameRu            String            @default("")
+  nameEn            String            @default("")
+  descUk            String            @default("")
+  descRu            String            @default("")
+  descEn            String            @default("")
   // Full display bullet list (one perk per line), including non-bookable
   // inclusions like host, gifts, piñata, cake take-out.
-  perksUk   String  @default("")
-  perksRu   String  @default("")
-  perksEn   String  @default("")
-  icon      String  @default("🎁")
-  photo     String  @default("")
-  maxPeople Int     @default(10)
+  perksUk           String            @default("")
+  perksRu           String            @default("")
+  perksEn           String            @default("")
+  icon              String            @default("🎁")
+  photo             String            @default("")
+  maxPeople         Int               @default(10)
   // Доплата за кожного учасника ПОНАД maxPeople, грн («Сталкер» = 1500).
   // 0 = стандартне правило: 10% від ціни комплексу за кожного додаткового.
-  extraPersonFee Int @default(0)
+  extraPersonFee    Int               @default(0)
   // Flat package price (weekday / weekend). If 0, price = sum of its items.
-  fixedPriceWeekday Int @default(0)
-  fixedPriceWeekend Int @default(0)
-  sortOrder Int     @default(0)
-  active    Boolean @default(true)
-  items     PackageItem[]
+  fixedPriceWeekday Int               @default(0)
+  fixedPriceWeekend Int               @default(0)
+  sortOrder         Int               @default(0)
+  active            Boolean           @default(true)
+  items             PackageItem[]
 }
 
 // The bookable sequence of a package (only calendar-occupying activities).
@@ -283,7 +300,7 @@ model Booking {
   location   Location @relation(fields: [locationId], references: [id])
   locationId String
   date       String // ISO date "2026-07-11" (local day)
-  status     String   @default("NEW")  // BookingStatus
+  status     String   @default("NEW") // BookingStatus
   source     String   @default("SITE") // BookingSource
   lang       String   @default("uk")
 
@@ -291,9 +308,9 @@ model Booking {
   customerPhone String
   comment       String @default("")
 
-  people     Int      @default(1)
-  totalPrice Int      @default(0) // grn, snapshot of computed total (editable)
-  prepaidAmount Int   @default(0) // сплачений аванс (grn)
+  people        Int @default(1)
+  totalPrice    Int @default(0) // grn, snapshot of computed total (editable)
+  prepaidAmount Int @default(0) // сплачений аванс (grn)
 
   // Бронь створена як комплекс: ціна фіксована (не сума позицій), а в
   // календарі/картці видно назву комплексу. Порожньо = поштучний набір.
@@ -301,47 +318,47 @@ model Booking {
   packageName String  @default("")
 
   // Telegram linkage for the confirmation flow
-  telegramChatId  String @default("")
+  telegramChatId   String           @default("")
   // ID картки у KeyCRM (якщо інтеграцію ввімкнено), щоб оновлювати/видаляти її
-  keycrmCardId    String @default("")
-  crmComments     BookingComment[]
-  telegramUsername String @default("")
+  keycrmCardId     String           @default("")
+  crmComments      BookingComment[]
+  telegramUsername String           @default("")
 
-  items      BookingItem[]
-  addons     BookingAddon[]
-  logs       AuditLog[]
+  items  BookingItem[]
+  addons BookingAddon[]
+  logs   AuditLog[]
 
   createdById String?
   createdBy   User?   @relation("bookingCreatedBy", fields: [createdById], references: [id])
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([locationId, date])
   @@index([status])
 }
 
 model BookingItem {
-  id         String   @id @default(cuid())
-  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  bookingId  String
-  activity   Activity @relation(fields: [activityId], references: [id])
-  activityId String
+  id          String           @id @default(cuid())
+  booking     Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId   String
+  activity    Activity         @relation(fields: [activityId], references: [id])
+  activityId  String
   // Snapshot of what was booked (survives catalog edits)
-  title      String
-  startMin   Int // minutes from midnight
+  title       String
+  startMin    Int // minutes from midnight
   durationMin Int
-  people     Int  @default(1)
-  price      Int  // grn, snapshot (editable in CRM)
+  people      Int              @default(1)
+  price       Int // grn, snapshot (editable in CRM)
   // Assigned physical room (auto-picked on creation when the activity has
   // mapped rooms). Null for legacy items / activities without rooms.
-  room       Room?   @relation(fields: [roomId], references: [id], onDelete: SetNull)
-  roomId     String?
+  room        Room?            @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  roomId      String?
   // Обраний сценарій (для квестів). variantName — знімок назви, щоб картка
   // читалась навіть після перейменування чи видалення варіанта з каталогу.
   variant     ActivityVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   variantId   String?
-  variantName String  @default("")
+  variantName String           @default("")
 
   @@index([bookingId])
 }
@@ -403,22 +420,22 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  auditLogs      AuditLog[]
-  bookingsCreated Booking[] @relation("bookingCreatedBy")
+  auditLogs       AuditLog[]
+  bookingsCreated Booking[]  @relation("bookingCreatedBy")
 }
 
 // Immutable trail: who did what. Used to trace deletions and edits.
 model AuditLog {
-  id        String   @id @default(cuid())
-  user      User?    @relation(fields: [userId], references: [id])
+  id        String  @id @default(cuid())
+  user      User?   @relation(fields: [userId], references: [id])
   userId    String?
-  actorName String   @default("") // snapshot of actor (survives user deletion)
+  actorName String  @default("") // snapshot of actor (survives user deletion)
   action    String // CREATE | UPDATE | DELETE | STATUS | LOGIN | PRICE
   entity    String // Booking | Activity | ActivityPrice | User | ...
-  entityId  String   @default("")
-  summary   String   @default("") // human-readable one-liner
-  before    String   @default("") // JSON snapshot
-  after     String   @default("") // JSON snapshot
+  entityId  String  @default("")
+  summary   String  @default("") // human-readable one-liner
+  before    String  @default("") // JSON snapshot
+  after     String  @default("") // JSON snapshot
 
   booking   Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
   bookingId String?

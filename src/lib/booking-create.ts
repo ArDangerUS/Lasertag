@@ -92,16 +92,27 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
     new Set(input.items.map((i) => i.variantId).filter(Boolean) as string[])
   );
   const variants = variantIds.length
-    ? await prisma.activityVariant.findMany({ where: { id: { in: variantIds } } })
+    ? await prisma.activityVariant.findMany({
+        where: { id: { in: variantIds } },
+        include: { rooms: { include: { room: true } } },
+      })
     : [];
   const varById = new Map(variants.map((v) => [v.id, v]));
 
   // ---- room auto-assignment ----------------------------------------------
   // Each item takes one of its activity's mapped rooms at this location.
   // Existing bookings + earlier items of THIS booking both count as occupied.
-  const mappedRoomIdsAll = activities.flatMap((a) =>
-    a.rooms.filter((r) => r.room.locationId === input.locationId && r.room.active).map((r) => r.room.id)
-  );
+  const mappedRoomIdsAll = [
+    ...activities.flatMap((a) =>
+      a.rooms
+        .filter((r) => r.room.locationId === input.locationId && r.room.active)
+        .map((r) => r.room.id)
+    ),
+    // кімнати сценаріїв («Хованки» на арені) теж треба врахувати як зайняті
+    ...variants.flatMap((v) =>
+      v.rooms.filter((r) => r.room.locationId === input.locationId && r.room.active).map((r) => r.room.id)
+    ),
+  ];
   const existingItems = mappedRoomIdsAll.length
     ? await prisma.bookingItem.findMany({
         where: {
@@ -119,38 +130,68 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
     arr.push([it.startMin, it.startMin + it.durationMin + (it.activity?.cleanupMin ?? 0)]);
     roomBusy.set(it.roomId, arr);
   }
+  // Кімнати, які тримає САМА ця бронь під банкет. Своя банкетна кімната не
+  // може заважати власному ж майстер-класу, який у ній і проходить.
+  const ownRoomBusy = new Map<string, [number, number][]>();
+
+  // Кімнати позиції: у сценарію можуть бути власні («Хованки» — це квест,
+  // але проводиться на лазертаг-арені), інакше беремо кімнати розваги.
+  const roomsFor = (act: (typeof activities)[number], variantId?: string) => {
+    const v = variantId ? varById.get(variantId) : null;
+    const own = (v?.rooms ?? [])
+      .map((x) => x.room)
+      .filter((r) => r.locationId === input.locationId && r.active);
+    const list = own.length
+      ? own
+      : act.rooms
+          .map((r) => r.room)
+          .filter((r) => r.locationId === input.locationId && r.active);
+    return [...list].sort((a, b) => a.sortOrder - b.sortOrder);
+  };
+
   const pickRoom = (
     activityId: string,
     startMin: number,
     durationMin: number,
-    preferredRoomId?: string
+    preferredRoomId?: string,
+    variantId?: string
   ): string | null => {
     const act = actById.get(activityId);
     if (!act) return null;
-    const rooms = act.rooms
-      .filter((r) => r.room.locationId === input.locationId && r.room.active)
-      .sort((a, b) => a.room.sortOrder - b.room.sortOrder);
+    const rooms = roomsFor(act, variantId);
     if (!rooms.length) return null; // activity without mapped rooms → capacity model
+    const isRoomItem = act.category === "room";
     const end = startMin + durationMin + act.cleanupMin;
+    const overlapsAny = (arr: [number, number][] | undefined) =>
+      (arr ?? []).some(([a, b]) => startMin < b && a < end);
     const isFree = (roomId: string) =>
-      (roomBusy.get(roomId) ?? []).every(([a, b]) => end <= a || b <= startMin);
+      !overlapsAny(roomBusy.get(roomId)) &&
+      // банкет не може стати в кімнату, яку ця ж бронь уже тримає
+      (!isRoomItem || !overlapsAny(ownRoomBusy.get(roomId)));
     const occupy = (roomId: string) => {
-      const busy = roomBusy.get(roomId) ?? [];
+      const map = isRoomItem ? ownRoomBusy : roomBusy;
+      const busy = map.get(roomId) ?? [];
       busy.push([startMin, end]);
-      roomBusy.set(roomId, busy);
+      map.set(roomId, busy);
       return roomId;
     };
     // Manager explicitly chose a room — honour it or fail with a clear reason.
     if (preferredRoomId) {
-      const r = rooms.find((x) => x.room.id === preferredRoomId);
+      const r = rooms.find((x) => x.id === preferredRoomId);
       if (!r) throw new Error(`«${act.nameUk}»: обрана кімната не підходить для цієї розваги`);
       if (!isFree(preferredRoomId)) {
-        throw new Error(`Кімната «${r.room.name}» вже зайнята на цей час`);
+        throw new Error(`Кімната «${r.name}» вже зайнята на цей час`);
       }
       return occupy(preferredRoomId);
     }
+    // Спершу кімната, яку ця бронь уже тримає під банкет: майстер-клас чи шоу
+    // логічно проводити саме в ній.
+    const held = rooms.find(
+      (r) => !isRoomItem && overlapsAny(ownRoomBusy.get(r.id)) && isFree(r.id)
+    );
+    if (held) return occupy(held.id);
     for (const r of rooms) {
-      if (isFree(r.room.id)) return occupy(r.room.id);
+      if (isFree(r.id)) return occupy(r.id);
     }
     throw new Error(
       `«${act.nameUk}»: немає вільної кімнати на цей час` +
@@ -160,8 +201,26 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
     );
   };
 
+  // Банкетні кімнати розставляємо першими, щоб решта позицій могла стати в
+  // ту саму кімнату, яку свято вже займає.
+  const roomByIndex = new Map<number, string | null>();
+  const order = input.items
+    .map((_, i) => i)
+    .sort((a, b) => {
+      const ra = actById.get(input.items[a].activityId)?.category === "room" ? 0 : 1;
+      const rb = actById.get(input.items[b].activityId)?.category === "room" ? 0 : 1;
+      return ra - rb;
+    });
+  for (const i of order) {
+    const it = input.items[i];
+    roomByIndex.set(
+      i,
+      pickRoom(it.activityId, it.startMin, it.durationMin, it.roomId, it.variantId)
+    );
+  }
+
   // Build item rows with snapshot titles + resolved prices.
-  const itemData = input.items.map((it) => {
+  const itemData = input.items.map((it, idx) => {
     const act = actById.get(it.activityId);
     if (!act) throw new Error("Розвагу не знайдено");
     // Понад ліміт пускаємо лише тих, у кого задана доплата за учасника
@@ -192,7 +251,7 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
       durationMin: it.durationMin,
       people: it.people,
       price,
-      roomId: pickRoom(act.id, it.startMin, it.durationMin, it.roomId),
+      roomId: roomByIndex.get(idx) ?? null,
       variantId: variant?.id ?? null,
       variantName: variant?.nameUk ?? "",
     };

@@ -89,7 +89,9 @@ export async function loadPublicCatalog(locale: Locale): Promise<PublicCatalog> 
   const [locations, activities, addons, packages] = await Promise.all([
     prisma.location.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
     prisma.activity.findMany({
-      where: { active: true },
+      // crmOnly — шоу-програми й майстер-класи: їх бронює менеджер, на сайті
+      // їх не показуємо
+      where: { active: true, crmOnly: false },
       orderBy: { sortOrder: "asc" },
       include: {
         locations: { where: { active: true } },

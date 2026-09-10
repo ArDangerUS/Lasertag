@@ -39,6 +39,8 @@ type Act = {
   cleanupMin: number;
   // грн за кожного учасника понад maxPeople; 0 = більшу групу не приймаємо
   extraPersonFee: number;
+  // true = лише для CRM: на сайті бронювання розваги не видно
+  crmOnly: boolean;
   locations: LocLink[];
   prices: Price[];
 };
@@ -437,6 +439,7 @@ function CreateActivityForm({ locations, onDone }: { locations: Loc[]; onDone: (
 function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
   const router = useRouter();
   const [active, setActive] = useState(act.active);
+  const [crmOnly, setCrmOnly] = useState(act.crmOnly);
   const [names, setNames] = useState({ uk: act.nameUk, ru: act.nameRu, en: act.nameEn });
   // Numeric fields are kept as strings so the user can clear them completely
   // while typing; an empty field falls back to the last saved value.
@@ -516,6 +519,7 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           active,
+          crmOnly,
           nameUk: names.uk,
           nameRu: names.ru,
           nameEn: names.en,
@@ -604,7 +608,19 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
         <span className="rounded-full bg-[#0e0e0e] px-2.5 py-1 text-[11px] text-[#888]">
           {act.perPerson ? "за людину" : "за компанію"}
         </span>
-        <label className="ml-auto flex cursor-pointer items-center gap-2 text-[13px]">
+        {crmOnly && (
+          <span className="rounded-full bg-[#b6791b]/20 px-2.5 py-1 text-[11px] font-bold text-[#e0a03a]">
+            лише CRM
+          </span>
+        )}
+        <label
+          className="ml-auto flex cursor-pointer items-center gap-2 text-[13px]"
+          title="Розвага є в CRM, але на сайті бронювання її не показуємо — менеджер домовляється по телефону"
+        >
+          <input type="checkbox" checked={crmOnly} onChange={(e) => setCrmOnly(e.target.checked)} />
+          <span className={crmOnly ? "text-[#e0a03a]" : "text-[#888]"}>Тільки CRM</span>
+        </label>
+        <label className="flex cursor-pointer items-center gap-2 text-[13px]">
           <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
           <span className={active ? "text-[#3cba54]" : "text-[#888]"}>
             {active ? "Доступна" : "Прихована"}

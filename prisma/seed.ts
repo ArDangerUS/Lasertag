@@ -26,6 +26,7 @@ async function main() {
   await prisma.packageItem.deleteMany();
   await prisma.package.deleteMany();
   await prisma.activityPrice.deleteMany();
+  await prisma.activityVariantRoom.deleteMany();
   await prisma.activityVariantLocation.deleteMany();
   await prisma.activityVariant.deleteMany();
   await prisma.activityRoom.deleteMany();
@@ -100,6 +101,7 @@ async function main() {
         minPeople: a.minPeople,
         maxPeople: a.maxPeople,
         extraPersonFee: a.extraPersonFee ?? 0,
+        crmOnly: a.crmOnly ?? false,
         sortOrder: a.sortOrder,
         active: !a.hidden,
       },
@@ -159,6 +161,12 @@ async function main() {
           create: v.locationSlugs
             .filter((slug) => locBySlug[slug])
             .map((slug) => ({ locationId: locBySlug[slug] })),
+        },
+        // «Хованки» йдуть на арені, а не в квест-кімнаті
+        rooms: {
+          create: (v.roomRefs ?? [])
+            .filter((ref) => roomByRef[ref])
+            .map((ref) => ({ roomId: roomByRef[ref] })),
         },
       },
     });
