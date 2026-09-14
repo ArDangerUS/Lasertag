@@ -134,6 +134,26 @@ async function topUp() {
     }
   }
 
+  // 4a. Шоу та майстер-класи спершу завели з тривалістю в годину, поки
+  //     уточнювали в клієнта. Тепер ставимо фактичні 30/40 хв. Ознака того,
+  //     що запис ще не виправляли — стара примітка в описі, тож повторно це
+  //     не спрацює навіть якщо тривалість колись повернуть на 60.
+  for (const a of ACTIVITIES) {
+    if (!a.crmOnly) continue;
+    const cur = await prisma.activity.findUnique({ where: { key: a.key } });
+    if (!cur || !cur.descUk.includes("бронюється на годину")) continue;
+    await prisma.activity.update({
+      where: { id: cur.id },
+      data: {
+        durationMin: a.durationMin,
+        descUk: a.descUk,
+        descRu: a.descRu,
+        descEn: a.descEn,
+      },
+    });
+    console.log(`Top-up: ${a.key} duration ${cur.durationMin} → ${a.durationMin} min`);
+  }
+
   // 5. Кімнати сценаріїв: «Хованки» проводяться на лазертаг-арені, а не в
   //    квест-кімнаті, тож займають саме арену.
   const variantRooms = await prisma.activityVariantRoom.count();
