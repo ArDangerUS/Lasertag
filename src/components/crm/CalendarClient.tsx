@@ -354,7 +354,7 @@ function WeekView({
             className="grid border-t border-[#f0f0f0]"
             style={{ gridTemplateColumns: "56px repeat(7, minmax(0, 1fr))", minHeight: 64 }}
           >
-            <div className="flex items-start justify-end pr-2 pt-2 text-[12px] font-semibold text-[#999]">
+            <div className="sticky left-0 z-10 flex items-start justify-end bg-white pr-2 pt-2 text-[12px] font-semibold text-[#999]">
               {h}:00
             </div>
             {days.map((d) => {
@@ -587,14 +587,85 @@ function ActivityDayGrid({
     return list;
   }, [bookings, timeMoves]);
 
+  // Прокрутка таблиці протягуванням: колонок багато, і возитися зі смугою
+  // внизу незручно. Тягнути можна порожнім місцем, середньою або правою
+  // кнопкою; плитки й кнопки лишаються клікабельними.
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const pan = useRef<{ x: number; y: number; left: number; top: number; moved: boolean } | null>(
+    null
+  );
+
+  const startPan = (e: React.PointerEvent) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const t = e.target as HTMLElement;
+    // лівою кнопкою — лише по порожньому місцю, щоб не ламати перетягування
+    // броней і кліки по кнопках
+    // Плитки броней тягнуться самі (зміна часу), тому по них не панорамуємо.
+    // Кнопки «+» вкривають майже всю сітку, тож по них тягнути МОЖНА —
+    // зайвий клік після протягування гаситься нижче.
+    if (e.button === 0 && t.closest("[draggable='true'], select, input, a")) return;
+    if (e.button !== 0 && e.button !== 1 && e.button !== 2) return;
+    pan.current = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop, moved: false };
+  };
+  const movePan = (e: React.PointerEvent) => {
+    const p = pan.current;
+    const el = scrollRef.current;
+    if (!p || !el) return;
+    const dx = e.clientX - p.x;
+    const dy = e.clientY - p.y;
+    if (!p.moved && Math.abs(dx) + Math.abs(dy) < 4) return; // дрібний рух = клік
+    p.moved = true;
+    el.scrollLeft = p.left - dx;
+    el.scrollTop = p.top - dy;
+    el.style.cursor = "grabbing";
+    el.style.userSelect = "none";
+  };
+  const endPan = () => {
+    const el = scrollRef.current;
+    if (el) {
+      el.style.cursor = "";
+      el.style.userSelect = "";
+    }
+    // прапорець moved лишаємо до contextmenu, щоб відрізнити протягування
+    // правою кнопкою від звичайного правого кліку
+    if (pan.current && !pan.current.moved) pan.current = null;
+  };
+
   return (
-    <div className="overflow-x-auto rounded-card bg-white thin-scroll">
+    <>
+    <p className="mb-1.5 text-[11px] text-[#999]">
+      Таблицю можна тягнути мишкою вбік — за порожнє місце, середньою або правою кнопкою.
+      Назви розваг і колонка часу лишаються на місці під час прокрутки.
+    </p>
+    <div
+      ref={scrollRef}
+      onPointerDown={startPan}
+      onPointerMove={movePan}
+      onPointerUp={endPan}
+      onPointerLeave={endPan}
+      onClickCapture={(e) => {
+        // протягнули поверх кнопки — це була прокрутка, а не клік
+        if (pan.current?.moved) {
+          e.preventDefault();
+          e.stopPropagation();
+          pan.current = null;
+        }
+      }}
+      onContextMenu={(e) => {
+        if (pan.current?.moved) {
+          e.preventDefault(); // це було протягування, а не виклик меню
+          pan.current = null;
+        }
+      }}
+      className="thin-scroll max-h-[calc(100vh-190px)] min-h-[380px] overflow-auto rounded-card bg-white"
+    >
       <div style={{ minWidth: Math.max(700, 64 + acts.length * 170) }}>
         <div
-          className="grid"
+          className="sticky top-0 z-20 grid bg-white"
           style={{ gridTemplateColumns: `64px repeat(${acts.length}, minmax(0, 1fr))` }}
         >
-          <div />
+          <div className="sticky left-0 z-10 bg-white" />
           {acts.map((a) => {
             const cap = a.capacityByLocation[location.id] ?? 1;
             return (
@@ -617,7 +688,7 @@ function ActivityDayGrid({
             className="grid border-t border-[#f0f0f0]"
             style={{ gridTemplateColumns: `64px repeat(${acts.length}, minmax(0, 1fr))`, minHeight: 64 }}
           >
-            <div className="flex items-start justify-end pr-2 pt-2 text-[12px] font-semibold text-[#999]">
+            <div className="sticky left-0 z-10 flex items-start justify-end bg-white pr-2 pt-2 text-[12px] font-semibold text-[#999]">
               {h}:00
             </div>
             {acts.map((a) => {
@@ -710,6 +781,7 @@ function ActivityDayGrid({
         ))}
       </div>
     </div>
+    </>
   );
 }
 
