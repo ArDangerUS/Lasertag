@@ -462,11 +462,11 @@ function DayView({
         {weekend ? "Вихідний / святковий тариф" : "Будній тариф"}
       </div>
 
-      {/* stat tiles */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      {/* stat tiles — виручку бачить лише адміністратор */}
+      <div className={`grid grid-cols-2 gap-3 ${isAdmin ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
         <Stat label="Бронювань сьогодні" value={String(totalBookings)} />
         <Stat label="Учасників" value={String(participants)} />
-        <Stat label="Очікувана виручка" value={`${fmtMoney(revenue)} грн`} />
+        {isAdmin && <Stat label="Очікувана виручка" value={`${fmtMoney(revenue)} грн`} />}
         <Stat label="Нові / непідтверджені" value={String(unconfirmed)} accent="#f5a623" />
       </div>
 

@@ -72,10 +72,14 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   return { id: u.id, email: u.email, name: u.name, role: u.role as Role };
 }
 
-export function can(role: Role, cap: "write" | "manageUsers" | "editCatalog"): boolean {
+export function can(
+  role: Role,
+  cap: "write" | "manageUsers" | "editCatalog" | "seeRevenue"
+): boolean {
   const m = ROLE_META[role];
   if (cap === "write") return m.canWrite;
   if (cap === "manageUsers") return m.canManageUsers;
+  if (cap === "seeRevenue") return m.canSeeRevenue;
   return m.canEditCatalog;
 }
 

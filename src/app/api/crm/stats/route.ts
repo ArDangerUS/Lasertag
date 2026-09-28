@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, can } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +9,10 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // Виручка — тільки для адміністратора
+  if (!can(user.role, "seeRevenue")) {
+    return NextResponse.json({ error: "Статистика доступна лише адміністратору" }, { status: 403 });
+  }
 
   const from = req.nextUrl.searchParams.get("from");
   const to = req.nextUrl.searchParams.get("to");

@@ -29,10 +29,15 @@ export const ROLE = {
 export type Role = keyof typeof ROLE;
 export const ROLES = Object.keys(ROLE) as Role[];
 
-export const ROLE_META: Record<Role, { uk: string; canWrite: boolean; canManageUsers: boolean; canEditCatalog: boolean }> = {
-  ADMIN: { uk: "Адміністратор", canWrite: true, canManageUsers: true, canEditCatalog: true },
-  MANAGER: { uk: "Менеджер", canWrite: true, canManageUsers: false, canEditCatalog: false },
-  VIEWER: { uk: "Перегляд", canWrite: false, canManageUsers: false, canEditCatalog: false },
+// canSeeRevenue — підсумки виручки (статистика, плитка «Очікувана виручка»).
+// Ціни окремих броней менеджер бачить і далі: без них він не назве клієнту суму.
+export const ROLE_META: Record<
+  Role,
+  { uk: string; canWrite: boolean; canManageUsers: boolean; canEditCatalog: boolean; canSeeRevenue: boolean }
+> = {
+  ADMIN: { uk: "Адміністратор", canWrite: true, canManageUsers: true, canEditCatalog: true, canSeeRevenue: true },
+  MANAGER: { uk: "Менеджер", canWrite: true, canManageUsers: false, canEditCatalog: false, canSeeRevenue: false },
+  VIEWER: { uk: "Перегляд", canWrite: false, canManageUsers: false, canEditCatalog: false, canSeeRevenue: false },
 };
 
 // Default prepaid amount required to confirm a booking (grn) — 1000 to FOP card.
