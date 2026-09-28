@@ -100,6 +100,8 @@ export type CrmCatalog = {
     durationMin: number;
     durationOptions: number[];
     locationIds: string[];
+    // тарифи (для попереднього розрахунку суми прямо у формі)
+    prices: { locationId: string | null; durationMin: number | null; weekday: number; weekend: number }[];
     // rooms/arenas per location (parallel groups)
     capacityByLocation: Record<string, number>;
     // mapped physical room ids per location (empty = capacity model)
@@ -132,6 +134,7 @@ export async function loadCrmCatalog(): Promise<CrmCatalog> {
       orderBy: { sortOrder: "asc" },
       include: {
         locations: { where: { active: true } },
+        prices: true,
         rooms: { include: { room: true } },
         variants: {
           where: { active: true },
@@ -171,6 +174,12 @@ export async function loadCrmCatalog(): Promise<CrmCatalog> {
       durationMin: a.durationMin,
       durationOptions: a.durationOptions ? (JSON.parse(a.durationOptions) as number[]) : [],
       locationIds: a.locations.map((x) => x.locationId),
+      prices: a.prices.map((p) => ({
+        locationId: p.locationId,
+        durationMin: p.durationMin,
+        weekday: p.priceWeekday,
+        weekend: p.priceWeekend,
+      })),
       capacityByLocation: Object.fromEntries(
         a.locations.map((x) => {
           const mapped = a.rooms.filter((r) => r.room.locationId === x.locationId && r.room.active);

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { CrmBooking, CrmCatalog } from "@/lib/crm-data";
 import { STATUS_META, BOOKING_STATUSES, type BookingStatus } from "@/lib/constants";
 import { fmtMoney, minToHHMM } from "@/lib/pricing";
+import { SLOT_STEP_MIN } from "@/lib/constants";
 import Modal from "./Modal";
 import PhoneMenu from "@/components/PhoneMenu";
 
@@ -66,6 +67,15 @@ export default function BookingEditor({
   const [added, setAdded] = useState<NewItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Зайнятість дня — щоб зайняті години було видно одразу в списку часу.
+  const [busy, setBusy] = useState<Record<string, number[]>>({});
+
+  useEffect(() => {
+    fetch(`/api/availability?locationId=${booking.locationId}&date=${booking.date}`)
+      .then((r) => r.json())
+      .then((d) => setBusy(d.busyByActivity ?? {}))
+      .catch(() => {});
+  }, [booking.locationId, booking.date]);
   // Внутрішні коментарі менеджерів (окремо від короткого коментаря клієнта)
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
@@ -143,6 +153,28 @@ export default function BookingEditor({
     (actById.get(activityId)?.variants ?? []).filter((v) =>
       v.locationIds.includes(booking.locationId)
     );
+
+  // Чи зайнята розвага на цей проміжок. Слоти, які тримає САМА ця бронь,
+  // не рахуємо — інакше кожна її позиція показувала б сама себе зайнятою.
+  const ownSlots = (activityId: string) => {
+    const out = new Set<number>();
+    booking.items
+      .filter((i) => i.activityId === activityId && !removed.includes(i.id))
+      .forEach((i) => {
+        for (let m = i.startMin; m < i.startMin + i.durationMin; m += SLOT_STEP_MIN) out.add(m);
+      });
+    return out;
+  };
+  const slotBusy = (activityId: string, startMin: number, durationMin: number) => {
+    const taken = busy[activityId];
+    if (!taken?.length) return false;
+    const mine = ownSlots(activityId);
+    const set = new Set(taken.filter((m) => !mine.has(m)));
+    for (let m = startMin; m < startMin + durationMin; m += SLOT_STEP_MIN) {
+      if (set.has(m)) return true;
+    }
+    return false;
+  };
 
   function addActivity(activityId: string) {
     const a = actById.get(activityId);
@@ -401,12 +433,17 @@ export default function BookingEditor({
                         [i.id]: { ...t, startMin: Number(e.target.value) },
                       }))
                     }
-                    className="rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white disabled:opacity-50"
+                    className={`rounded-lg border bg-[#161616] px-2 py-1.5 text-[13px] text-white disabled:opacity-50 ${
+                      slotBusy(i.activityId, t.startMin, t.durationMin)
+                        ? "border-[#a33] text-[#ff9b9b]"
+                        : "border-[#333]"
+                    }`}
                     title="Час початку"
                   >
                     {startOptions.map((m) => (
                       <option key={m} value={m}>
                         {minToHHMM(m)}
+                        {slotBusy(i.activityId, m, t.durationMin) ? " · зайнято" : ""}
                       </option>
                     ))}
                   </select>
@@ -539,11 +576,16 @@ export default function BookingEditor({
                   <select
                     value={n.startMin}
                     onChange={(e) => patch({ startMin: Number(e.target.value) })}
-                    className="rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
+                    className={`rounded-lg border bg-[#161616] px-2 py-1.5 text-[13px] text-white ${
+                      slotBusy(n.activityId, n.startMin, n.durationMin)
+                        ? "border-[#a33] text-[#ff9b9b]"
+                        : "border-[#333]"
+                    }`}
                   >
                     {startOptions.map((m) => (
                       <option key={m} value={m}>
                         {minToHHMM(m)}
+                        {slotBusy(n.activityId, m, n.durationMin) ? " · зайнято" : ""}
                       </option>
                     ))}
                   </select>

@@ -17,6 +17,9 @@ export const bookingItemSchema = z.object({
   roomId: z.string().optional(),
   // обраний сценарій розваги (квести); не впливає на ціну й зайнятість
   variantId: z.string().optional(),
+  // позиція входить у склад комплексу (її покриває фіксована ціна). Позиції
+  // без прапорця тарифікуються звичайно і додаються до суми зверху.
+  inPackage: z.boolean().optional(),
 });
 
 export const bookingAddonSchema = z.object({
@@ -257,11 +260,18 @@ export async function createBooking(input: CreateBookingInput, actor?: SessionUs
     };
   });
 
-  // Ціна комплексу лягає на першу позицію, решта — 0. Так сума позицій завжди
-  // дорівнює оголошеній ціні комплексу, скільки б розваг у ньому не було.
+  // Ціна комплексу лягає на першу його позицію, решта складових — 0. Те, що
+  // менеджер дописав ПОНАД програму комплексу, тарифікується звичайно і
+  // додається до суми зверху.
   if (pkg) {
+    // старі клієнти (сайт) прапорця не шлють — там усі позиції складові
+    const anyFlagged = input.items.some((i) => i.inPackage);
+    let first = true;
     itemData.forEach((row, idx) => {
-      row.price = idx === 0 ? packagePrice : 0;
+      const inPkg = anyFlagged ? !!input.items[idx].inPackage : true;
+      if (!inPkg) return; // позиція поза комплексом — лишаємо її власну ціну
+      row.price = first ? packagePrice : 0;
+      first = false;
     });
   }
 
