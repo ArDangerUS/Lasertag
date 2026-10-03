@@ -53,3 +53,37 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   return NextResponse.json({ ok: true });
 }
+
+// Прибрати ціну для локації — розвага повернеться до базової. Базовий рядок
+// (без локації) видалити не можна: без нього ціна впаде в нуль.
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const user = await getCurrentUser();
+  if (!user || !can(user.role, "editCatalog")) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+  const row = await prisma.activityPrice.findUnique({
+    where: { id: params.id },
+    include: { activity: true },
+  });
+  if (!row) return NextResponse.json({ error: "Не знайдено" }, { status: 404 });
+  if (!row.locationId) {
+    return NextResponse.json(
+      { error: "Базову ціну видаляти не можна — змініть її значення" },
+      { status: 400 }
+    );
+  }
+
+  await prisma.activityPrice.delete({ where: { id: params.id } });
+  await audit({
+    actor: user,
+    action: "PRICE",
+    entity: "ActivityPrice",
+    entityId: row.id,
+    summary: `Прибрано окрему ціну «${row.activity.nameUk}»${
+      row.durationMin ? ` (${row.durationMin} хв)` : ""
+    } — діє базова`,
+    before: { weekday: row.priceWeekday, weekend: row.priceWeekend },
+  });
+
+  return NextResponse.json({ ok: true });
+}

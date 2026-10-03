@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 type Price = {
   id: string;
+  locationId: string | null; // null = базова ціна для всіх локацій
   locationName: string;
   durationMin: number | null;
   priceWeekday: number;
@@ -37,6 +38,8 @@ type Act = {
   minPeople: number;
   maxPeople: number;
   cleanupMin: number;
+  // дозволені тривалості (лазертаг 30/60) — щоб ціну додавати на потрібну
+  durationOptions: number[];
   // грн за кожного учасника понад maxPeople; 0 = більшу групу не приймаємо
   extraPersonFee: number;
   // true = лише для CRM: на сайті бронювання розваги не видно
@@ -480,6 +483,67 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
     return Number.isFinite(n) && n >= 0 ? n : fallback;
   };
 
+  // Окрема ціна для локації: лазертаг на Нивках і в Городку може коштувати
+  // по-різному. Рядок із локацією перекриває базовий.
+  const [newPrice, setNewPrice] = useState({ locationId: "", durationMin: "", wd: "", we: "" });
+  const [addingPrice, setAddingPrice] = useState(false);
+  const durationChoices = act.durationOptions.length ? act.durationOptions : [];
+  // локації, де розвага є і де ще немає власної ціни на цю тривалість
+  const priceLocOptions = locations.filter((l) => {
+    if (!act.locations.some((x) => x.locationId === l.id)) return false;
+    const dur = newPrice.durationMin === "" ? null : Number(newPrice.durationMin);
+    return !prices.some((p) => p.locationId === l.id && (p.durationMin ?? null) === dur);
+  });
+
+  async function addPrice() {
+    const wd = parseInt(newPrice.wd, 10);
+    const we = parseInt(newPrice.we, 10);
+    if (!newPrice.locationId || !Number.isFinite(wd) || !Number.isFinite(we)) {
+      flash("Оберіть локацію і вкажіть обидві ціни");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch("/api/crm/prices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          activityId: act.id,
+          locationId: newPrice.locationId,
+          durationMin: newPrice.durationMin === "" ? null : Number(newPrice.durationMin),
+          priceWeekday: wd,
+          priceWeekend: we,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Помилка");
+      setNewPrice({ locationId: "", durationMin: "", wd: "", we: "" });
+      setAddingPrice(false);
+      flash("Ціну додано ✓");
+      router.refresh();
+    } catch (e: any) {
+      flash(e?.message || "Помилка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removePrice(id: string, label: string) {
+    if (!confirm(`Прибрати окрему ціну для «${label}»? Діятиме базова.`)) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/crm/prices/${id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Помилка");
+      flash("Прибрано ✓");
+      router.refresh();
+    } catch (e: any) {
+      flash(e?.message || "Помилка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function savePrice(idx: number) {
     const p = prices[idx];
     const weekday = parseOr(p.wdStr, p.priceWeekday);
@@ -841,7 +905,14 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
           <tbody>
             {prices.map((p, idx) => (
               <tr key={p.id} className="border-t border-[#242424]">
-                <td className="py-2 pr-4 text-[#ccc]">{p.locationName}</td>
+                <td className="py-2 pr-4 text-[#ccc]">
+                  {p.locationName}
+                  {p.locationId && (
+                    <span className="ml-1.5 rounded-full bg-[#56EF02]/15 px-1.5 py-0.5 text-[10px] font-bold text-[#56EF02]">
+                      окрема
+                    </span>
+                  )}
+                </td>
                 <td className="py-2 pr-4 text-[#aaa]">{p.durationMin ? `${p.durationMin} хв` : "—"}</td>
                 <td className="py-2 pr-4">
                   <input
@@ -878,18 +949,109 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
                   />
                 </td>
                 <td className="py-2">
-                  <button
-                    onClick={() => savePrice(idx)}
-                    disabled={busy}
-                    className="rounded-full bg-[#0e0e0e] px-3 py-1.5 text-[12px] font-bold text-[#56EF02]"
-                  >
-                    Зберегти
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => savePrice(idx)}
+                      disabled={busy}
+                      className="rounded-full bg-[#0e0e0e] px-3 py-1.5 text-[12px] font-bold text-[#56EF02]"
+                    >
+                      Зберегти
+                    </button>
+                    {p.locationId && (
+                      <button
+                        onClick={() => removePrice(p.id, p.locationName)}
+                        disabled={busy}
+                        className="h-7 w-7 rounded-full bg-[#2a2a2a] text-[#ff7a7a]"
+                        title="Прибрати окрему ціну — діятиме базова"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Окрема ціна для локації */}
+      <div className="mt-3">
+        {!addingPrice ? (
+          <button
+            onClick={() => setAddingPrice(true)}
+            className="rounded-full bg-[#0e0e0e] px-3 py-1.5 text-[12px] font-bold text-[#56EF02] ring-1 ring-[#333]"
+          >
+            + Ціна для окремої локації
+          </button>
+        ) : (
+          <div className="rounded-xl bg-[#0e0e0e] p-3">
+            <div className="mb-2 text-[11px] text-[#777]">
+              Ціна для однієї локації перекриває базову. Решта локацій працюють за базовою.
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={newPrice.locationId}
+                onChange={(e) => setNewPrice((v) => ({ ...v, locationId: e.target.value }))}
+                className="rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
+              >
+                <option value="">— локація —</option>
+                {priceLocOptions.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                  </option>
+                ))}
+              </select>
+              {durationChoices.length > 0 && (
+                <select
+                  value={newPrice.durationMin}
+                  onChange={(e) => setNewPrice((v) => ({ ...v, durationMin: e.target.value }))}
+                  className="rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
+                >
+                  <option value="">тривалість: будь-яка</option>
+                  {durationChoices.map((d) => (
+                    <option key={d} value={d}>
+                      {d} хв
+                    </option>
+                  ))}
+                </select>
+              )}
+              <input
+                type="number"
+                value={newPrice.wd}
+                onChange={(e) => setNewPrice((v) => ({ ...v, wd: e.target.value }))}
+                placeholder="будній"
+                className="w-28 rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-right text-[13px] text-white"
+              />
+              <input
+                type="number"
+                value={newPrice.we}
+                onChange={(e) => setNewPrice((v) => ({ ...v, we: e.target.value }))}
+                placeholder="вихідний"
+                className="w-28 rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-right text-[13px] text-white"
+              />
+              <button
+                onClick={addPrice}
+                disabled={busy}
+                className="rounded-full bg-[#56EF02] px-4 py-1.5 text-[13px] font-bold text-[#1A1A1A]"
+              >
+                Додати
+              </button>
+              <button
+                onClick={() => setAddingPrice(false)}
+                className="rounded-full border border-[#333] px-3 py-1.5 text-[12px] text-[#bbb]"
+              >
+                Скасувати
+              </button>
+            </div>
+            {durationChoices.length > 0 && (
+              <div className="mt-2 text-[11px] text-[#777]">
+                У цієї розваги тарифи по тривалості ({durationChoices.join(" / ")} хв) — додайте
+                окремий рядок на кожну, інакше для решти діятиме базова ціна.
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <VariantsBlock act={act} locations={locations} />

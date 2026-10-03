@@ -49,6 +49,7 @@ export default async function SettingsPage() {
         minPeople: a.minPeople,
         maxPeople: a.maxPeople,
         cleanupMin: a.cleanupMin,
+        durationOptions: a.durationOptions ? (JSON.parse(a.durationOptions) as number[]) : [],
         extraPersonFee: a.extraPersonFee,
         crmOnly: a.crmOnly,
         locations: a.locations.map((x) => ({ locationId: x.locationId, capacity: x.capacity })),
@@ -62,6 +63,7 @@ export default async function SettingsPage() {
         })),
         prices: a.prices.map((p) => ({
           id: p.id,
+          locationId: p.locationId,
           locationName: p.locationId ? locName.get(p.locationId) ?? "—" : "Базова (усі локації)",
           durationMin: p.durationMin,
           priceWeekday: p.priceWeekday,
