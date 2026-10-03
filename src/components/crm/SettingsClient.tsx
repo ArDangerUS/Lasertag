@@ -110,30 +110,6 @@ export default function SettingsClient({
   const [tab, setTab] = useState<"acts" | "addons" | "packages">("acts");
   const [showCreate, setShowCreate] = useState(false);
   const router = useRouter();
-  const [reordering, setReordering] = useState(false);
-
-  // Порядок розваг = порядок колонок у денному календарі й плиток на сайті.
-  // Нова розвага дописується в кінець, тож її треба мати змогу переставити.
-  async function moveActivity(index: number, dir: -1 | 1) {
-    const j = index + dir;
-    if (j < 0 || j >= activities.length || reordering) return;
-    const ids = activities.map((a) => a.id);
-    [ids[index], ids[j]] = [ids[j], ids[index]];
-    setReordering(true);
-    try {
-      const res = await fetch("/api/crm/activities/reorder", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error || "Помилка");
-      router.refresh();
-    } catch (e: any) {
-      alert(e?.message || "Помилка");
-    } finally {
-      setReordering(false);
-    }
-  }
 
   const tabCls = (on: boolean) =>
     `rounded-full px-4 py-2 text-[13px] font-bold transition ${
@@ -162,9 +138,8 @@ export default function SettingsClient({
                 <h2 className="text-[18px] font-extrabold">Розваги і ціни</h2>
                 <p className="text-[13px] text-[#888]">
                   Ціни (будні / вихідні), назви 3 мовами, локації та кількість кімнат/арен на кожній
-                  (скільки груп паралельно), розмір груп. «∞» = без обмежень. Стрілками ▲▼ зліва
-                  міняйте порядок — у ньому розваги стоять колонками в календарі та плитками на
-                  сайті. Кожна зміна — у журналі.
+                  (скільки груп паралельно), розмір груп. «∞» = без обмежень. Порядок розваг —
+                  у кнопці «↕ Порядок розваг» нижче. Кожна зміна — у журналі.
                 </p>
               </>
             ) : tab === "addons" ? (
@@ -208,17 +183,9 @@ export default function SettingsClient({
         )}
       </div>
 
+      {tab === "acts" && <OrderBlock activities={activities} />}
       {tab === "acts" &&
-        activities.map((a, i) => (
-          <ActivityCard
-            key={a.id}
-            act={a}
-            locations={locations}
-            index={i}
-            total={activities.length}
-            onMove={moveActivity}
-          />
-        ))}
+        activities.map((a) => <ActivityCard key={a.id} act={a} locations={locations} />)}
       {tab === "addons" && addons.map((a) => <AddonCard key={a.id} addon={a} />)}
       {tab === "packages" &&
         packages.map((p) => (
@@ -477,19 +444,150 @@ function CreateActivityForm({ locations, onDone }: { locations: Loc[]; onDone: (
   );
 }
 
-function ActivityCard({
-  act,
-  locations,
-  index,
-  total,
-  onMove,
-}: {
-  act: Act;
-  locations: Loc[];
-  index: number;
-  total: number;
-  onMove: (index: number, dir: -1 | 1) => void;
-}) {
+/* ---------------- порядок розваг ----------------
+   Окремий компактний список: перетягуванням або ▲▼ розваги міняються
+   місцями ЛОКАЛЬНО, а в базу порядок іде одним запитом по кнопці — інакше
+   кожен клік писав би окремий рядок у журнал. */
+function OrderBlock({ activities }: { activities: Act[] }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [ids, setIds] = useState<string[]>(activities.map((a) => a.id));
+  const [busy, setBusy] = useState(false);
+  const dragFrom = useRef<number | null>(null);
+
+  const saved = activities.map((a) => a.id);
+  const dirty = ids.length === saved.length && ids.some((id, i) => id !== saved[i]);
+  const byId = new Map(activities.map((a) => [a.id, a]));
+
+  const move = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= ids.length) return;
+    setIds((xs) => {
+      const next = [...xs];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  };
+  const dropAt = (to: number) => {
+    const from = dragFrom.current;
+    dragFrom.current = null;
+    if (from == null || from === to) return;
+    setIds((xs) => {
+      const next = [...xs];
+      const [row] = next.splice(from, 1);
+      next.splice(to, 0, row);
+      return next;
+    });
+  };
+
+  async function save() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/crm/activities/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Помилка");
+      router.refresh();
+    } catch (e: any) {
+      alert(e?.message || "Помилка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-card bg-[#161616] p-6">
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={() => {
+            setIds(activities.map((a) => a.id));
+            setOpen((o) => !o);
+          }}
+          className="rounded-full bg-[#0e0e0e] px-4 py-2 text-[13px] font-bold text-[#ccc] ring-1 ring-[#333]"
+        >
+          {open ? "Згорнути порядок розваг" : "↕ Порядок розваг"}
+        </button>
+        <span className="text-[12px] text-[#777]">
+          у цьому порядку розваги стоять колонками в календарі та плитками на сайті
+        </span>
+        {open && dirty && (
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => setIds(activities.map((a) => a.id))}
+              className="rounded-full border border-[#333] px-3 py-1.5 text-[12px] text-[#bbb]"
+            >
+              Скинути
+            </button>
+            <button
+              onClick={save}
+              disabled={busy}
+              className="rounded-full bg-[#56EF02] px-4 py-2 text-[13px] font-bold text-[#1A1A1A] disabled:opacity-60"
+            >
+              {busy ? "Збереження…" : "Зберегти порядок"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {open && (
+        <>
+          <p className="mt-3 text-[11px] text-[#777]">
+            Перетягніть рядок мишкою або скористайтесь ▲▼. Зміни зберігаються одним натисканням —
+            у журналі буде один запис, а не по одному на кожну перестановку.
+          </p>
+          <div className="mt-2 flex flex-col gap-1">
+            {ids.map((id, i) => {
+              const a = byId.get(id);
+              if (!a) return null;
+              return (
+                <div
+                  key={id}
+                  draggable
+                  onDragStart={() => (dragFrom.current = i)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => dropAt(i)}
+                  className="flex cursor-grab items-center gap-2 rounded-lg bg-[#0e0e0e] px-3 py-1.5 active:cursor-grabbing"
+                >
+                  <span className="text-[13px] text-[#555]">≡</span>
+                  <span className="w-6 text-[12px] text-[#666]">{i + 1}.</span>
+                  <span className="text-[15px]">{a.icon}</span>
+                  <span className="truncate text-[13px] text-[#ddd]">{a.nameUk}</span>
+                  {a.crmOnly && (
+                    <span className="rounded-full bg-[#b6791b]/20 px-2 py-0.5 text-[10px] font-bold text-[#e0a03a]">
+                      CRM
+                    </span>
+                  )}
+                  {!a.active && <span className="text-[11px] text-[#777]">прихована</span>}
+                  <span className="ml-auto flex items-center gap-0.5">
+                    <button
+                      onClick={() => move(i, -1)}
+                      disabled={i === 0}
+                      className="h-6 w-6 rounded text-[12px] text-[#888] hover:bg-[#1f1f1f] hover:text-white disabled:opacity-25"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      onClick={() => move(i, 1)}
+                      disabled={i === ids.length - 1}
+                      className="h-6 w-6 rounded text-[12px] text-[#888] hover:bg-[#1f1f1f] hover:text-white disabled:opacity-25"
+                    >
+                      ▼
+                    </button>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
   const router = useRouter();
   const [active, setActive] = useState(act.active);
   const [crmOnly, setCrmOnly] = useState(act.crmOnly);
@@ -727,25 +825,6 @@ function ActivityCard({
   return (
     <div className="rounded-card bg-[#161616] p-6">
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <span
-          className="flex flex-col"
-          title="Порядок розваг — так само вони стоять колонками в календарі та плитками на сайті"
-        >
-          <button
-            onClick={() => onMove(index, -1)}
-            disabled={index === 0}
-            className="h-4 w-5 text-[11px] leading-none text-[#888] hover:text-white disabled:opacity-25"
-          >
-            ▲
-          </button>
-          <button
-            onClick={() => onMove(index, 1)}
-            disabled={index === total - 1}
-            className="h-4 w-5 text-[11px] leading-none text-[#888] hover:text-white disabled:opacity-25"
-          >
-            ▼
-          </button>
-        </span>
         <span className="text-2xl">{act.icon}</span>
         <span className="text-[16px] font-extrabold">{names.uk}</span>
         <span className="rounded-full bg-[#0e0e0e] px-2.5 py-1 text-[11px] text-[#888]">
