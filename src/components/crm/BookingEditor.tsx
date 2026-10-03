@@ -20,6 +20,9 @@ type NewItem = {
   people: number;
   roomId?: string;
   variantId?: string;
+  // задається лише при ✂ розділенні залу: другий відрізок коштує 0,
+  // щоб сума броні не змінилась
+  price?: number;
 };
 
 export default function BookingEditor({
@@ -212,6 +215,37 @@ export default function BookingEditor({
     ]);
   }
 
+  // Велика програма: зал потрібен на початку (поїли) і в кінці (торт), а
+  // посередині всі на арені. Ріжемо наявний відрізок навпіл — другий шматок
+  // іде новою позицією з ціною 0, щоб сума броні не змінилась.
+  function splitRoomItem(itemId: string) {
+    const it = booking.items.find((x) => x.id === itemId);
+    if (!it) return;
+    const t = itemTimes[itemId] ?? { startMin: it.startMin, durationMin: it.durationMin };
+    if (t.durationMin < 60) {
+      setError("Відрізок замалий, щоб його ділити — мінімум 60 хв");
+      return;
+    }
+    const half = Math.max(30, Math.round(t.durationMin / 2 / 30) * 30);
+    const tail = Math.max(30, t.durationMin - half);
+    setItemTimes((m) => ({ ...m, [itemId]: { ...t, durationMin: half } }));
+    setAdded((xs) => [
+      ...xs,
+      {
+        key: `split-${itemId}-${Date.now()}`,
+        activityId: it.activityId,
+        startMin: t.startMin + t.durationMin - tail,
+        durationMin: tail,
+        people: itemPeople[itemId] ?? it.people,
+        // та сама кімната, що й у першого відрізка (порожньо = підбере сам)
+        roomId: itemRooms[itemId] || undefined,
+        // розділення не змінює суму — другий відрізок безкоштовний
+        price: 0,
+      },
+    ]);
+    setError("");
+  }
+
   // Сума показує лише те, що вже пораховано: ціну дописаних розваг рахує
   // сервер за тарифом, тож до збереження вона невідома.
   const total =
@@ -267,6 +301,7 @@ export default function BookingEditor({
                   people: n.people,
                   ...(n.roomId ? { roomId: n.roomId } : {}),
                   ...(n.variantId ? { variantId: n.variantId } : {}),
+                  ...(n.price != null ? { price: n.price } : {}),
                 })),
               }
             : {}),
@@ -583,6 +618,16 @@ export default function BookingEditor({
                     <span className="text-[12px] text-[#888]">грн</span>
                   </div>
 
+                  {canWrite && !gone && actById.get(i.activityId)?.category === "room" && (
+                    <button
+                      onClick={() => splitRoomItem(i.id)}
+                      className="rounded-lg border border-[#333] px-2 py-1 text-[12px] text-[#bbb] hover:border-[#56EF02] hover:text-white"
+                      title="Розбити зал на два відрізки — між ними він вільний для інших"
+                    >
+                      ✂ розділити
+                    </button>
+                  )}
+
                   {canWrite && (
                     <button
                       onClick={() =>
@@ -696,7 +741,9 @@ export default function BookingEditor({
                     className="w-16 rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
                     title="учасників"
                   />
-                  <span className="text-[12px] text-[#888]">ціна: авто</span>
+                  <span className="text-[12px] text-[#888]">
+                    {n.price === 0 ? "другий відрізок залу · 0 грн" : "ціна: авто"}
+                  </span>
 
                   <button
                     onClick={() => setAdded((xs) => xs.filter((_, k) => k !== idx))}
