@@ -224,6 +224,48 @@ async function topUp() {
       });
     }
   }
+
+  // 7. «Треш» шоу триває 30 хв, а не 40 (уточнення від локацій).
+  const trash = await prisma.activity.findUnique({ where: { key: "show-trash" } });
+  if (trash && trash.durationMin === 40) {
+    await prisma.activity.update({
+      where: { id: trash.id },
+      data: { durationMin: 30, descUk: "30 хв", descRu: "30 мин", descEn: "30 min" },
+    });
+    console.log("Top-up: trash show 40 → 30 min.");
+  }
+
+  // 8. Нові тарифи фотографа: 1 год — 3000, 2 год — 5000, 3 год — 6500.
+  const photo = await prisma.addon.findUnique({ where: { key: "photographer" } });
+  if (photo && photo.tiers.replace(/\s/g, "") === '{"1":2500,"2":4000,"3":5500}') {
+    await prisma.addon.update({
+      where: { id: photo.id },
+      data: { price: 3000, tiers: JSON.stringify({ 1: 3000, 2: 5000, 3: 6500 }) },
+    });
+    console.log("Top-up: photographer tiers 3000 / 5000 / 6500.");
+  }
+
+  // 9. Лабіринт «Хранитель Тіней» проходить у лазертаг-лабіринті (арені) —
+  //    квест-зона в цей час вільна. Раніше кімнат у нього не було зовсім,
+  //    тож він рахувався за ліміт паралельних груп.
+  const mazeAct = await prisma.activity.findUnique({ where: { key: "maze" } });
+  if (mazeAct) {
+    const have = await prisma.activityRoom.count({ where: { activityId: mazeAct.id } });
+    if (have === 0) {
+      const locs3 = await prisma.location.findMany({ select: { id: true, slug: true } });
+      const rooms3 = await prisma.room.findMany({ select: { id: true, key: true, locationId: true } });
+      const refOf3 = (r: { key: string; locationId: string }) =>
+        `${locs3.find((l) => l.id === r.locationId)?.slug ?? ""}:${r.key}`;
+      let added = 0;
+      for (const ref of ACTIVITY_ROOMS.maze ?? []) {
+        const room = rooms3.find((r) => refOf3(r) === ref);
+        if (!room) continue;
+        await prisma.activityRoom.create({ data: { activityId: mazeAct.id, roomId: room.id } });
+        added++;
+      }
+      if (added) console.log(`Top-up: maze → ${added} lasertag arenas.`);
+    }
+  }
 }
 
 async function main() {

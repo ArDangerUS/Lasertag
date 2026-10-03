@@ -9,6 +9,9 @@ import { z } from "zod";
 
 export const updateBookingSchema = z.object({
   status: z.string().optional(),
+  // Перенесення свята на іншу дату: години позицій лишаються, але всю
+  // програму перевіряємо заново вже на новий день.
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   customerName: z.string().max(120).optional(),
   customerPhone: z.string().max(40).optional(),
   comment: z.string().max(1000).optional(),
@@ -61,6 +64,10 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
   if (!before) throw new Error("Бронь не знайдено");
 
   if (input.status && !isStatus(input.status)) throw new Error("Невірний статус");
+
+  // Клієнт переніс святкування: дата броні міняється, програма лишається.
+  const targetDate = input.date ?? before.date;
+  const dateChanged = targetDate !== before.date;
 
   const roomChanges: string[] = [];
   const structureChanges: string[] = [];
@@ -145,6 +152,11 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
       )
       .map((i) => i.id)
   );
+  // На новій даті кімнати можуть бути зайняті іншими клієнтами, тож
+  // перевіряємо наново КОЖНУ позицію, а не тільки змінені.
+  if (dateChanged) {
+    before.items.filter((i) => !removeIds.has(i.id)).forEach((i) => movedIds.add(i.id));
+  }
 
   if (movedIds.size || addItems.length || removeIds.size) {
     const location = await prisma.location.findUnique({ where: { id: before.locationId } });
@@ -173,7 +185,7 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
     const others = await prisma.bookingItem.findMany({
       where: {
         bookingId: { not: id },
-        booking: { locationId: before.locationId, date: before.date, status: { not: "CANCELLED" } },
+        booking: { locationId: before.locationId, date: targetDate, status: { not: "CANCELLED" } },
       },
       include: { activity: { select: { cleanupMin: true } } },
     });
@@ -384,7 +396,7 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
               act,
               locationId: before.locationId,
               locationSlug: location.slug,
-              date: before.date,
+              date: targetDate,
               startMin: a.startMin,
               durationMin: a.durationMin,
               people: a.people,
@@ -435,6 +447,7 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
     where: { id },
     data: {
       status: input.status ?? undefined,
+      date: dateChanged ? targetDate : undefined,
       customerName: input.customerName ?? undefined,
       customerPhone: input.customerPhone ?? undefined,
       comment: input.comment ?? undefined,
@@ -456,15 +469,18 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
       (statusChanged
         ? `Статус ${before.status} → ${updated.status} · ${updated.code}`
         : `Змінено бронь ${updated.code} (сума ${updated.totalPrice} грн)`) +
+      (dateChanged ? `; дата ${before.date} → ${targetDate}` : "") +
       (structureChanges.length ? `; ${structureChanges.join("; ")}` : "") +
       (roomChanges.length ? `; ${roomChanges.join("; ")}` : ""),
     before: {
       status: before.status,
+      date: before.date,
       total: before.totalPrice,
       items: before.items.map((i) => ({ id: i.id, price: i.price, startMin: i.startMin })),
     },
     after: {
       status: updated.status,
+      date: updated.date,
       total: updated.totalPrice,
       items: updated.items.map((i) => ({ id: i.id, price: i.price, startMin: i.startMin })),
     },

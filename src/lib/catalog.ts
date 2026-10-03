@@ -216,8 +216,7 @@ export const ACTIVITIES: SeedActivity[] = [
     minPeople: 1,
     maxPeople: 10,
     sortOrder: 5,
-    // Поки що прихована: окремої кімнати під «Хранителя Тіней» немає.
-    hidden: true,
+    // Проходить у лазертаг-лабіринті (арені) — квест-кімната в цей час вільна.
     locations: ALL,
     prices: [{ weekday: 6000, weekend: 6000 }],
   },
@@ -343,12 +342,12 @@ export const ACTIVITIES: SeedActivity[] = [
     nameUk: "«Треш» шоу",
     nameRu: "«Треш» шоу",
     nameEn: "Trash show",
-    descUk: "40 хв",
-    descRu: "40 мин",
-    descEn: "40 min",
+    descUk: "30 хв",
+    descRu: "30 мин",
+    descEn: "30 min",
     icon: "🔥",
     perPerson: false,
-    durationMin: 40,
+    durationMin: 30,
     cleanupMin: 0,
     minPeople: 1,
     maxPeople: 999,
@@ -535,7 +534,7 @@ export const ADDONS = [
   { key: "pinata-own", nameUk: "Своя піньята", nameRu: "Своя пиньята", nameEn: "Bring-your-own piñata", subUk: "", subRu: "", subEn: "", price: 500, sortOrder: 3 },
   { key: "animator", nameUk: "Аніматор", nameRu: "Аниматор", nameEn: "Animator", subUk: "2 години · 1 аніматор", subRu: "2 часа · 1 аниматор", subEn: "2 hours · 1 animator", price: 3000, sortOrder: 4 },
   // Професійний фотограф: 1 год — 2500, 2 год — 4000, 3 год — 5500.
-  { key: "photographer", nameUk: "Професійний фотограф", nameRu: "Профессиональный фотограф", nameEn: "Professional photographer", subUk: "оберіть кількість годин (максимум 3 години)", subRu: "выберите количество часов (максимум 3 часа)", subEn: "choose the number of hours (up to 3)", price: 2500, tiers: { 1: 2500, 2: 4000, 3: 5500 }, sortOrder: 5 },
+  { key: "photographer", nameUk: "Професійний фотограф", nameRu: "Профессиональный фотограф", nameEn: "Professional photographer", subUk: "оберіть кількість годин (максимум 3 години)", subRu: "выберите количество часов (максимум 3 часа)", subEn: "choose the number of hours (up to 3)", price: 3000, tiers: { 1: 3000, 2: 5000, 3: 6500 }, sortOrder: 5 },
   // Торт: ціна залежить від ваги, начинки та дизайну — узгоджується з менеджером.
   { key: "cake", nameUk: "Святковий торт", nameRu: "Праздничный торт", nameEn: "Cake", subUk: "ціна залежить від ваги, начинки та дизайну", subRu: "цена зависит от веса, начинки и дизайна", subEn: "price depends on weight, filling and design", price: 0, sortOrder: 6 },
   { key: "merch", nameUk: "Мерч нашої компанії", nameRu: "Мерч нашей компании", nameEn: "Our merch", subUk: "футболки у двох кольорах, брендовані чашки, неонові браслетики", subRu: "футболки в двух цветах, брендированные чашки, неоновые браслетики", subEn: "t-shirts in two colours, branded cups, neon bracelets", price: 0, sortOrder: 7 },
@@ -695,6 +694,8 @@ export const ACTIVITY_ROOMS: Record<string, string[]> = {
   laser: ["nyvky:arena", "new-way:arena", "dream-yellow:arena", "gorodok:arena-a", "gorodok:arena-b"],
   scenario: ["nyvky:arena", "new-way:arena", "dream-yellow:arena", "gorodok:arena-a", "gorodok:arena-b"],
   quest: ["nyvky:quest", "new-way:quest", "dream-yellow:quest", "gorodok:quest"],
+  // «Хранитель Тіней» проводиться в лазертаг-лабіринті, а не в квест-кімнаті.
+  maze: ["nyvky:arena", "new-way:arena", "dream-yellow:arena", "gorodok:arena-a", "gorodok:arena-b"],
   papershow: ["nyvky:papershow", "new-way:papershow", "dream-yellow:papershow"],
   paperneon: ["gorodok:papershow"],
   squid: ["gorodok:squid"],

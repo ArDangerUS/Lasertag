@@ -23,6 +23,8 @@ type Line = {
   fullEvent?: boolean;
   // позиція зі складу комплексу — її покриває фіксована ціна комплексу
   fromPackage?: boolean;
+  // час виставлено вручну (розділена банкетна зала) — ▲▼ його не чіпають
+  manualTime?: boolean;
 };
 
 export default function BookingCreate({
@@ -46,6 +48,8 @@ export default function BookingCreate({
   // Коментар менеджера: після створення броні падає у стрічку коментарів
   const [managerComment, setManagerComment] = useState("");
   const [status, setStatus] = useState("CONFIRMED");
+  // Аванс одразу при створенні — щоб не шукати бронь удруге.
+  const [prepaidStr, setPrepaidStr] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
   const [addonIds, setAddonIds] = useState<Record<string, number>>({});
   // Обраний комплекс: ціна фіксована, склад підставляється цілком.
@@ -170,6 +174,8 @@ export default function BookingCreate({
   function restack(ls: Line[], from: number): Line[] {
     let cursor = from;
     return ls.map((l) => {
+      // відрізок, якому менеджер сам виставив час (розділена банкетна)
+      if (l.manualTime) return l;
       if (l.parallel || l.fullEvent) return { ...l, startMin: from };
       const next = { ...l, startMin: cursor };
       cursor += l.durationMin;
@@ -223,6 +229,35 @@ export default function BookingCreate({
     setPkgId("");
     setPkgPriceStr("");
     setLines([]);
+  }
+
+  // Велика програма: банкетну залу часто беруть не суцільним блоком, а двома
+  // відрізками (посиділи — пішли грати — повернулись). Обидва лишаються в
+  // складі комплексу, тож ціна не змінюється; між ними зал вільний.
+  function splitRoomLine(i: number) {
+    setLines((ls) => {
+      const src = effectiveLines[i] ?? ls[i];
+      if (!src) return ls;
+      const half = Math.max(30, Math.round(src.durationMin / 2 / 30) * 30);
+      const tail = Math.max(30, src.durationMin - half);
+      const first: Line = {
+        ...src,
+        fullEvent: false,
+        manualTime: true,
+        startMin: src.startMin,
+        durationMin: half,
+      };
+      const second: Line = {
+        ...src,
+        fullEvent: false,
+        manualTime: true,
+        startMin: src.startMin + src.durationMin - tail,
+        durationMin: tail,
+      };
+      const next = [...ls];
+      next.splice(i, 1, first, second);
+      return next;
+    });
   }
 
   function moveLine(i: number, dir: -1 | 1) {
@@ -281,6 +316,7 @@ export default function BookingCreate({
           customerName: name,
           customerPhone: phone,
           status,
+          ...(prepaidStr.trim() !== "" ? { prepaidAmount: Number(prepaidStr) || 0 } : {}),
           ...(pkgId ? { packageId: pkgId } : {}),
           ...(pkgId && manualPkgPrice != null && Number.isFinite(manualPkgPrice)
             ? { packagePrice: manualPkgPrice }
@@ -430,6 +466,23 @@ export default function BookingCreate({
               <option value="PREPAID">Аванс</option>
             </select>
           </div>
+          <div>
+            <Label>Аванс, грн</Label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={prepaidStr}
+              placeholder="0"
+              onChange={(e) => {
+                const raw = e.target.value.replace(/\D/g, "");
+                setPrepaidStr(raw);
+                // внесли аванс — статус сам стає «Аванс»
+                if (raw && Number(raw) > 0 && status !== "PREPAID") setStatus("PREPAID");
+              }}
+              className="w-full rounded-xl border border-[#333] bg-[#0e0e0e] px-3 py-2.5 text-[14px] text-white"
+              title="Скільки клієнт уже залишив — записується одразу"
+            />
+          </div>
         </div>
 
         {/* packages — фіксована ціна, склад підставляється цілком */}
@@ -542,6 +595,10 @@ export default function BookingCreate({
               const variants = variantOptions(l.activityId);
               const isRoom = act?.category === "room";
               const taken = slotBusy(l.activityId, l.startMin, l.durationMin);
+              // Склад комплексу — фіксований: за ту саму ціну розваги не
+              // підміняються. Міняти можна лише послідовність (▲▼),
+              // сценарій, кімнату й кількість учасників.
+              const locked = !!pkg && !!l.fromPackage;
               return (
                 <div
                   key={i}
@@ -569,25 +626,34 @@ export default function BookingCreate({
                       </button>
                     </div>
                   )}
-                  <select
-                    value={l.activityId}
-                    onChange={(e) => {
-                      const a = actById.get(e.target.value);
-                      updateLine(i, {
-                        activityId: e.target.value,
-                        durationMin: a?.durationOptions[0] ?? a?.durationMin ?? 60,
-                        roomId: undefined,
-                        variantId: undefined,
-                      });
-                    }}
-                    className="flex-1 rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
-                  >
-                    {locActivities.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.icon} {a.name}
-                      </option>
-                    ))}
-                  </select>
+                  {locked ? (
+                    <div
+                      className="flex-1 truncate rounded-lg border border-[#2a2a2a] bg-[#141414] px-2 py-1.5 text-[13px] text-[#ddd]"
+                      title="Розвага входить у комплекс — замінити її не можна"
+                    >
+                      {act?.icon} {act?.name}
+                    </div>
+                  ) : (
+                    <select
+                      value={l.activityId}
+                      onChange={(e) => {
+                        const a = actById.get(e.target.value);
+                        updateLine(i, {
+                          activityId: e.target.value,
+                          durationMin: a?.durationOptions[0] ?? a?.durationMin ?? 60,
+                          roomId: undefined,
+                          variantId: undefined,
+                        });
+                      }}
+                      className="flex-1 rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
+                    >
+                      {locActivities.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.icon} {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   {variants.length > 0 && (
                     <select
                       value={l.variantId ?? ""}
@@ -605,7 +671,7 @@ export default function BookingCreate({
                   )}
                   <select
                     value={l.startMin}
-                    disabled={l.fullEvent}
+                    disabled={l.fullEvent || (locked && !l.manualTime)}
                     onChange={(e) => updateLine(i, { startMin: Number(e.target.value) })}
                     className={`rounded-lg border bg-[#161616] px-2 py-1.5 text-[13px] text-white disabled:opacity-50 ${
                       taken ? "border-[#a33] text-[#ff9b9b]" : "border-[#333]"
@@ -621,7 +687,7 @@ export default function BookingCreate({
                   </select>
                   <select
                     value={l.durationMin}
-                    disabled={l.fullEvent}
+                    disabled={l.fullEvent || (locked && !l.manualTime)}
                     onChange={(e) => updateLine(i, { durationMin: Number(e.target.value) })}
                     className="rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white disabled:opacity-50"
                   >
@@ -685,17 +751,28 @@ export default function BookingCreate({
                   {pkg && l.fromPackage && (
                     <span className="text-[12px] text-[#888]">у комплексі</span>
                   )}
-                  <button
-                    onClick={() =>
-                      setLines((ls) => {
-                        const next = ls.filter((_, idx) => idx !== i);
-                        return pkgId ? restack(next, pkgStart) : next;
-                      })
-                    }
-                    className="h-7 w-7 rounded-full bg-[#2a2a2a] text-[#bbb]"
-                  >
-                    ✕
-                  </button>
+                  {locked && isRoom && (
+                    <button
+                      onClick={() => splitRoomLine(i)}
+                      className="rounded-lg border border-[#333] px-2 py-1 text-[12px] text-[#bbb] hover:border-[#56EF02] hover:text-white"
+                      title="Розбити зал на два відрізки — між ними він вільний для інших"
+                    >
+                      ✂ розділити
+                    </button>
+                  )}
+                  {(!locked || l.manualTime) && (
+                    <button
+                      onClick={() =>
+                        setLines((ls) => {
+                          const next = ls.filter((_, idx) => idx !== i);
+                          return pkgId ? restack(next, pkgStart) : next;
+                        })
+                      }
+                      className="h-7 w-7 rounded-full bg-[#2a2a2a] text-[#bbb]"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -707,7 +784,7 @@ export default function BookingCreate({
           </div>
           <p className="mt-2 text-[11px] text-[#777]">
             {pkg
-              ? "Ціна комплексу фіксована — окремі позиції не тарифікуються. Стрілками ▲▼ міняйте порядок: час перерахується автоматично."
+              ? "Склад комплексу фіксований: розваги та їх тривалість за цю ціну не змінюються. Стрілками ▲▼ міняйте лише послідовність — час перерахується автоматично. Банкетну залу можна розбити на два відрізки кнопкою ✂. Усе інше додавайте окремо — воно порахується понад ціну комплексу."
               : "Порожнє поле ціни = система порахує за тарифом (будній/вихідний). Ціну можна змінити після створення."}
           </p>
         </div>

@@ -29,6 +29,9 @@ function todayISO() {
 }
 
 const HOURS = Array.from({ length: 12 }, (_, i) => 10 + i); // 10:00–21:00
+// Ширина колонки розваги в денній сітці. Вузькі колонки = більше розваг
+// одразу на екрані (на телефоні й на ноутбуці сітку доводилось скролити).
+const COL_W = 120;
 
 export default function CalendarClient({
   catalog,
@@ -432,11 +435,13 @@ function DayView({
       : catalog.locations.filter((l) => l.id === locationFilter);
 
   const weekend = isWeekendISO(date);
-  const totalBookings = bookings.length;
-  const participants = bookings.reduce((s, b) => s + b.people, 0);
-  const revenue = bookings
-    .filter((b) => b.status !== "CANCELLED")
-    .reduce((s, b) => s + b.totalPrice, 0);
+  // Скасовані броні лишаються в сітці (перекреслені), але в підрахунки свят
+  // не йдуть — інакше здається, ніби бронь не внесли.
+  const live = bookings.filter((b) => b.status !== "CANCELLED");
+  const totalBookings = live.length;
+  const cancelledCount = bookings.length - live.length;
+  const participants = live.reduce((s, b) => s + b.people, 0);
+  const revenue = live.reduce((s, b) => s + b.totalPrice, 0);
   const unconfirmed = bookings.filter((b) => b.status === "NEW").length;
 
   const byCell = useMemo(() => {
@@ -451,7 +456,9 @@ function DayView({
 
   const countByLoc = useMemo(() => {
     const m: Record<string, number> = {};
-    bookings.forEach((b) => (m[b.locationId] = (m[b.locationId] ?? 0) + 1));
+    bookings
+      .filter((b) => b.status !== "CANCELLED")
+      .forEach((b) => (m[b.locationId] = (m[b.locationId] ?? 0) + 1));
     return m;
   }, [bookings]);
 
@@ -464,7 +471,11 @@ function DayView({
 
       {/* stat tiles — виручку бачить лише адміністратор */}
       <div className={`grid grid-cols-2 gap-3 ${isAdmin ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
-        <Stat label="Бронювань сьогодні" value={String(totalBookings)} />
+        <Stat
+          label="Бронювань сьогодні"
+          value={String(totalBookings)}
+          note={cancelledCount ? `+ ${cancelledCount} скасовано (не рахуємо)` : undefined}
+        />
         <Stat label="Учасників" value={String(participants)} />
         {isAdmin && <Stat label="Очікувана виручка" value={`${fmtMoney(revenue)} грн`} />}
         <Stat label="Нові / непідтверджені" value={String(unconfirmed)} accent="#f5a623" />
@@ -660,23 +671,24 @@ function ActivityDayGrid({
       }}
       className="thin-scroll max-h-[calc(100vh-190px)] min-h-[380px] overflow-auto rounded-card bg-white"
     >
-      <div style={{ minWidth: Math.max(700, 64 + acts.length * 170) }}>
+      <div style={{ minWidth: Math.max(640, 44 + acts.length * COL_W) }}>
         <div
           className="sticky top-0 z-20 grid bg-white"
-          style={{ gridTemplateColumns: `64px repeat(${acts.length}, minmax(0, 1fr))` }}
+          style={{ gridTemplateColumns: `44px repeat(${acts.length}, minmax(0, 1fr))` }}
         >
           <div className="sticky left-0 z-10 bg-white" />
           {acts.map((a) => {
             const cap = a.capacityByLocation[location.id] ?? 1;
             return (
-              <div key={a.id} className="min-w-0 p-2 text-center">
-                <div className="rounded-xl bg-[#111] px-2 py-2 text-white">
-                  <div className="truncate text-[12px] font-bold" title={a.name}>
+              <div key={a.id} className="min-w-0 p-1 text-center">
+                <div className="rounded-lg bg-[#111] px-1.5 py-1.5 text-white">
+                  <div
+                    className="text-[11px] font-bold leading-tight [display:-webkit-box] [overflow:hidden] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
+                    title={a.name}
+                  >
                     {a.icon} {a.name}
                   </div>
-                  <div className="text-[11px] text-[#888]">
-                    {cap > 1 ? `${cap} кімнат/арен` : "1 кімната"}
-                  </div>
+                  <div className="text-[10px] text-[#888]">{cap > 1 ? `${cap} кімн.` : "1 кімн."}</div>
                 </div>
               </div>
             );
@@ -686,9 +698,9 @@ function ActivityDayGrid({
           <div
             key={h}
             className="grid border-t border-[#f0f0f0]"
-            style={{ gridTemplateColumns: `64px repeat(${acts.length}, minmax(0, 1fr))`, minHeight: 64 }}
+            style={{ gridTemplateColumns: `44px repeat(${acts.length}, minmax(0, 1fr))`, minHeight: 52 }}
           >
-            <div className="sticky left-0 z-10 flex items-start justify-end bg-white pr-2 pt-2 text-[12px] font-semibold text-[#999]">
+            <div className="sticky left-0 z-10 flex items-start justify-end bg-white pr-1.5 pt-1.5 text-[11px] font-semibold text-[#999]">
               {h}:00
             </div>
             {acts.map((a) => {
@@ -758,19 +770,19 @@ function ActivityDayGrid({
                     {free > 0 && canWrite && (
                       <button
                         onClick={() => onCreate(location.id, h * 60)}
-                        className={`flex w-full flex-1 items-center justify-center gap-1 rounded-lg text-[11px] font-semibold ${
+                        className={`flex w-full flex-1 items-center justify-center gap-1 rounded-lg text-[10px] font-semibold ${
                           maxBusy > 0
-                            ? "min-h-[24px] bg-[#f0fbe8] text-[#56b800]"
-                            : "min-h-[52px] bg-[#fafafa] text-[#ccc] hover:bg-[#f0fbe8] hover:text-[#56b800]"
+                            ? "min-h-[20px] bg-[#f0fbe8] text-[#56b800]"
+                            : "min-h-[40px] bg-[#fafafa] text-[#ccc] hover:bg-[#f0fbe8] hover:text-[#56b800]"
                         }`}
                         title="Додати бронь"
                       >
-                        {maxBusy > 0 ? `+ вільно ${free}/${cap}` : cap > 1 ? `+ · ${cap} вільно` : "+"}
+                        {maxBusy > 0 ? `${free}/${cap}` : cap > 1 ? `+ · ${cap}` : "+"}
                       </button>
                     )}
                     {free === 0 && (
-                      <div className="rounded-lg bg-[#fdecec] px-2 py-1 text-center text-[10px] font-bold text-[#c05252]">
-                        зайнято {maxBusy}/{cap}
+                      <div className="rounded-lg bg-[#fdecec] px-1 py-0.5 text-center text-[10px] font-bold text-[#c05252]">
+                        {maxBusy}/{cap}
                       </div>
                     )}
                   </div>
@@ -863,7 +875,7 @@ function ItemChip({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       title={draggable ? "Перетягніть, щоб змінити час (у межах колонки)" : undefined}
-      className={`w-full min-w-0 overflow-hidden rounded-lg px-2 py-1.5 text-left ${
+      className={`w-full min-w-0 overflow-hidden rounded-lg px-1.5 py-1 text-left ${
         draggable ? "cursor-grab active:cursor-grabbing" : ""
       }`}
       style={{
@@ -1039,13 +1051,24 @@ function LocTab({ on, onClick, children }: { on: boolean; onClick: () => void; c
   );
 }
 
-function Stat({ label, value, accent }: { label: string; value: string; accent?: string }) {
+function Stat({
+  label,
+  value,
+  accent,
+  note,
+}: {
+  label: string;
+  value: string;
+  accent?: string;
+  note?: string;
+}) {
   return (
     <div className="rounded-card bg-white px-5 py-4">
       <div className="text-[12px] text-[#888]">{label}</div>
       <div className="mt-1 text-[24px] font-extrabold" style={{ color: accent ?? "#111" }}>
         {value}
       </div>
+      {note && <div className="mt-0.5 text-[11px] text-[#aaa]">{note}</div>}
     </div>
   );
 }

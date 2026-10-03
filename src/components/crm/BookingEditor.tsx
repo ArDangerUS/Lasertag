@@ -44,6 +44,9 @@ export default function BookingEditor({
   // рядок для поля «Учасників»: можна повністю стерти, на blur відновлюється
   const [peopleStr, setPeopleStr] = useState(String(booking.people));
   const [prepaid, setPrepaid] = useState(booking.prepaidAmount);
+  // Перенесення свята на інший день: програма їде цілком, з перевіркою
+  // зайнятості на новій даті.
+  const [date, setDate] = useState(booking.date);
   const [itemPrices, setItemPrices] = useState<Record<string, number>>(
     Object.fromEntries(booking.items.map((i) => [i.id, i.price]))
   );
@@ -218,6 +221,7 @@ export default function BookingEditor({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status,
+          ...(date !== booking.date ? { date } : {}),
           customerName: name,
           customerPhone: phone,
           people,
@@ -378,6 +382,24 @@ export default function BookingEditor({
               onChange={(v) => setPrepaid(Number(v) || 0)}
               disabled={!canWrite}
             />
+          </div>
+          <div>
+            <Label>Дата свята</Label>
+            <input
+              type="date"
+              value={date}
+              disabled={!canWrite}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full rounded-xl border border-[#333] bg-[#0e0e0e] px-3 py-2.5 text-[14px] text-white disabled:opacity-60"
+              title="Клієнт переніс святкування — програма переїде на цей день цілком"
+            />
+            {date !== booking.date && (
+              <p className="mt-1 text-[11px] text-[#f5a623]">
+                Перенесення з {booking.date}. Години розваг лишаються ті самі — якщо на новий день
+                щось зайняте, збереження не пройде. Ціни не перераховуються (будній/вихідний тариф
+                за потреби змініть вручну).
+              </p>
+            )}
           </div>
         </div>
 

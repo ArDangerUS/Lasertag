@@ -107,6 +107,31 @@ export default function SettingsClient({
 }) {
   const [tab, setTab] = useState<"acts" | "addons" | "packages">("acts");
   const [showCreate, setShowCreate] = useState(false);
+  const router = useRouter();
+  const [reordering, setReordering] = useState(false);
+
+  // Порядок розваг = порядок колонок у денному календарі й плиток на сайті.
+  // Нова розвага дописується в кінець, тож її треба мати змогу переставити.
+  async function moveActivity(index: number, dir: -1 | 1) {
+    const j = index + dir;
+    if (j < 0 || j >= activities.length || reordering) return;
+    const ids = activities.map((a) => a.id);
+    [ids[index], ids[j]] = [ids[j], ids[index]];
+    setReordering(true);
+    try {
+      const res = await fetch("/api/crm/activities/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || "Помилка");
+      router.refresh();
+    } catch (e: any) {
+      alert(e?.message || "Помилка");
+    } finally {
+      setReordering(false);
+    }
+  }
 
   const tabCls = (on: boolean) =>
     `rounded-full px-4 py-2 text-[13px] font-bold transition ${
@@ -135,7 +160,9 @@ export default function SettingsClient({
                 <h2 className="text-[18px] font-extrabold">Розваги і ціни</h2>
                 <p className="text-[13px] text-[#888]">
                   Ціни (будні / вихідні), назви 3 мовами, локації та кількість кімнат/арен на кожній
-                  (скільки груп паралельно), розмір груп. «∞» = без обмежень. Кожна зміна — у журналі.
+                  (скільки груп паралельно), розмір груп. «∞» = без обмежень. Стрілками ▲▼ зліва
+                  міняйте порядок — у ньому розваги стоять колонками в календарі та плитками на
+                  сайті. Кожна зміна — у журналі.
                 </p>
               </>
             ) : tab === "addons" ? (
@@ -180,7 +207,16 @@ export default function SettingsClient({
       </div>
 
       {tab === "acts" &&
-        activities.map((a) => <ActivityCard key={a.id} act={a} locations={locations} />)}
+        activities.map((a, i) => (
+          <ActivityCard
+            key={a.id}
+            act={a}
+            locations={locations}
+            index={i}
+            total={activities.length}
+            onMove={moveActivity}
+          />
+        ))}
       {tab === "addons" && addons.map((a) => <AddonCard key={a.id} addon={a} />)}
       {tab === "packages" &&
         packages.map((p) => (
@@ -439,7 +475,19 @@ function CreateActivityForm({ locations, onDone }: { locations: Loc[]; onDone: (
   );
 }
 
-function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
+function ActivityCard({
+  act,
+  locations,
+  index,
+  total,
+  onMove,
+}: {
+  act: Act;
+  locations: Loc[];
+  index: number;
+  total: number;
+  onMove: (index: number, dir: -1 | 1) => void;
+}) {
   const router = useRouter();
   const [active, setActive] = useState(act.active);
   const [crmOnly, setCrmOnly] = useState(act.crmOnly);
@@ -667,6 +715,25 @@ function ActivityCard({ act, locations }: { act: Act; locations: Loc[] }) {
   return (
     <div className="rounded-card bg-[#161616] p-6">
       <div className="mb-4 flex flex-wrap items-center gap-3">
+        <span
+          className="flex flex-col"
+          title="Порядок розваг — так само вони стоять колонками в календарі та плитками на сайті"
+        >
+          <button
+            onClick={() => onMove(index, -1)}
+            disabled={index === 0}
+            className="h-4 w-5 text-[11px] leading-none text-[#888] hover:text-white disabled:opacity-25"
+          >
+            ▲
+          </button>
+          <button
+            onClick={() => onMove(index, 1)}
+            disabled={index === total - 1}
+            className="h-4 w-5 text-[11px] leading-none text-[#888] hover:text-white disabled:opacity-25"
+          >
+            ▼
+          </button>
+        </span>
         <span className="text-2xl">{act.icon}</span>
         <span className="text-[16px] font-extrabold">{names.uk}</span>
         <span className="rounded-full bg-[#0e0e0e] px-2.5 py-1 text-[11px] text-[#888]">
