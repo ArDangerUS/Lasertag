@@ -24,6 +24,8 @@ export type SeedActivity = {
   perPerson: boolean;
   durationMin: number;
   durationOptions?: number[]; // lasertag => [30,60]
+  // короткі сеанси, доступні лише в CRM (на сайті не показуються)
+  crmDurationOptions?: number[]; // => [10,20]
   cleanupMin?: number;
   minPeople: number;
   maxPeople: number;
@@ -104,6 +106,7 @@ export const ACTIVITIES: SeedActivity[] = [
     perPerson: true,
     durationMin: 60,
     durationOptions: [30, 60],
+    crmDurationOptions: [10, 20],
     cleanupMin: 0,
     minPeople: 1,
     maxPeople: 999,
@@ -233,6 +236,7 @@ export const ACTIVITIES: SeedActivity[] = [
     perPerson: true,
     durationMin: 30,
     durationOptions: [30, 60],
+    crmDurationOptions: [10, 20],
     cleanupMin: 0,
     minPeople: 1,
     maxPeople: 999,
@@ -256,6 +260,7 @@ export const ACTIVITIES: SeedActivity[] = [
     perPerson: true,
     durationMin: 30,
     durationOptions: [30, 60],
+    crmDurationOptions: [10, 20],
     cleanupMin: 0,
     minPeople: 1,
     maxPeople: 999,
@@ -279,6 +284,7 @@ export const ACTIVITIES: SeedActivity[] = [
     perPerson: true,
     durationMin: 30,
     durationOptions: [30, 60],
+    crmDurationOptions: [10, 20],
     cleanupMin: 0,
     minPeople: 1,
     maxPeople: 999,
@@ -302,6 +308,7 @@ export const ACTIVITIES: SeedActivity[] = [
     perPerson: true,
     durationMin: 30,
     durationOptions: [30, 60],
+    crmDurationOptions: [10, 20],
     cleanupMin: 0,
     minPeople: 1,
     maxPeople: 999,

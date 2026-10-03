@@ -130,6 +130,9 @@ model Activity {
   durationMin     Int     @default(60)
   // JSON array of allowed durations in minutes, e.g. "[30,60]" for lasertag.
   durationOptions String  @default("")
+  // Додаткові тривалості ЛИШЕ для CRM (на сайті їх не видно): короткі сеанси
+  // 10/20 хв, які менеджер ставить вручну. JSON-масив, напр. "[10,20]".
+  crmDurationOptions String @default("")
   // Cleanup/turnaround buffer after the activity (minutes). Quests may set 0-20.
   cleanupMin      Int     @default(0)
   // true = послуга лише для CRM: на сайті бронювання її не видно, менеджер

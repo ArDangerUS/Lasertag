@@ -90,6 +90,15 @@ export function tieredBlockPrice(
   rows: PriceRow[],
   opts: { locationId: string; date: string; durationMin: number }
 ): number {
+  // Якщо для саме цієї тривалості є власний тариф (короткі сеанси 10/20 хв,
+  // які менеджер вписав у налаштуваннях) — беремо його, без розкладання.
+  const exact = resolvePrice(rows, {
+    locationId: opts.locationId,
+    durationMin: opts.durationMin,
+    date: opts.date,
+  });
+  if (exact != null) return exact;
+
   const p30 = resolvePrice(rows, { locationId: opts.locationId, durationMin: 30, date: opts.date });
   const p60 = resolvePrice(rows, { locationId: opts.locationId, durationMin: 60, date: opts.date });
   const hour = p60 ?? (p30 != null ? p30 * 2 : 0);

@@ -12,6 +12,8 @@ export const updateBookingSchema = z.object({
   // Перенесення свята на іншу дату: години позицій лишаються, але всю
   // програму перевіряємо заново вже на новий день.
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  // Переїзд на іншу локацію: кімнати підбираються там заново.
+  locationId: z.string().optional(),
   customerName: z.string().max(120).optional(),
   customerPhone: z.string().max(40).optional(),
   comment: z.string().max(1000).optional(),
@@ -65,9 +67,13 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
 
   if (input.status && !isStatus(input.status)) throw new Error("Невірний статус");
 
-  // Клієнт переніс святкування: дата броні міняється, програма лишається.
+  // Клієнт переніс святкування: дата / локація броні міняються, програма
+  // лишається та сама і перевіряється вже на новому місці.
   const targetDate = input.date ?? before.date;
   const dateChanged = targetDate !== before.date;
+  const targetLocationId = input.locationId ?? before.locationId;
+  const locationChanged = targetLocationId !== before.locationId;
+  const movedAll = dateChanged || locationChanged;
 
   const roomChanges: string[] = [];
   const structureChanges: string[] = [];
@@ -152,14 +158,14 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
       )
       .map((i) => i.id)
   );
-  // На новій даті кімнати можуть бути зайняті іншими клієнтами, тож
-  // перевіряємо наново КОЖНУ позицію, а не тільки змінені.
-  if (dateChanged) {
+  // На новій даті / локації кімнати можуть бути зайняті іншими клієнтами,
+  // тож перевіряємо наново КОЖНУ позицію, а не тільки змінені.
+  if (movedAll) {
     before.items.filter((i) => !removeIds.has(i.id)).forEach((i) => movedIds.add(i.id));
   }
 
   if (movedIds.size || addItems.length || removeIds.size) {
-    const location = await prisma.location.findUnique({ where: { id: before.locationId } });
+    const location = await prisma.location.findUnique({ where: { id: targetLocationId } });
     if (!location) throw new Error("Локацію не знайдено");
 
     const actIds = Array.from(
@@ -185,7 +191,7 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
     const others = await prisma.bookingItem.findMany({
       where: {
         bookingId: { not: id },
-        booking: { locationId: before.locationId, date: targetDate, status: { not: "CANCELLED" } },
+        booking: { locationId: targetLocationId, date: targetDate, status: { not: "CANCELLED" } },
       },
       include: { activity: { select: { cleanupMin: true } } },
     });
@@ -281,6 +287,9 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
     }): string | null => {
       const act = actById.get(opts.activityId);
       if (!act) throw new Error("Розвагу не знайдено");
+      if (!act.locations.some((x) => x.locationId === targetLocationId)) {
+        throw new Error(`«${act.nameUk}» не проводиться на локації «${location.name}»`);
+      }
       const isRoomItem = act.category === "room";
       const label = `${opts.title} ${minToHHMM(opts.startMin)}–${minToHHMM(
         opts.startMin + opts.durationMin
@@ -297,13 +306,13 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
       ];
       const variantOwn = (opts.variantId ? varById.get(opts.variantId)?.rooms ?? [] : [])
         .map((x) => x.room)
-        .filter((r) => r.locationId === before.locationId && r.active);
+        .filter((r) => r.locationId === targetLocationId && r.active);
       const rooms = (
         variantOwn.length
           ? variantOwn
           : act.rooms
               .map((r) => r.room)
-              .filter((r) => r.locationId === before.locationId && r.active)
+              .filter((r) => r.locationId === targetLocationId && r.active)
       )
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder);
@@ -346,7 +355,7 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
         return free.id;
       }
 
-      const cap = act.locations.find((x) => x.locationId === before.locationId)?.capacity ?? 1;
+      const cap = act.locations.find((x) => x.locationId === targetLocationId)?.capacity ?? 1;
       const busy = (actBusy.get(opts.activityId) ?? []).filter((b) => overlaps(b, iv)).length;
       if (busy >= cap) throw new Error(`${label}: усі місця зайняті (місткість ${cap})`);
       push(actBusy, opts.activityId, iv);
@@ -361,7 +370,8 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
         title: bi.title,
         startMin: p?.startMin ?? bi.startMin,
         durationMin: p?.durationMin ?? bi.durationMin,
-        preferredRoomId: p?.roomId !== undefined ? p.roomId : bi.roomId,
+        // кімнати старої локації на новій не існують — підбираємо заново
+        preferredRoomId: locationChanged ? null : p?.roomId !== undefined ? p.roomId : bi.roomId,
         variantId: p?.variantId !== undefined ? p.variantId : bi.variantId,
       });
       pending.set(mid, { ...(pending.get(mid) ?? {}), roomId });
@@ -394,7 +404,7 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
           ? a.price
           : computeItemPrice({
               act,
-              locationId: before.locationId,
+              locationId: targetLocationId,
               locationSlug: location.slug,
               date: targetDate,
               startMin: a.startMin,
@@ -448,6 +458,7 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
     data: {
       status: input.status ?? undefined,
       date: dateChanged ? targetDate : undefined,
+      locationId: locationChanged ? targetLocationId : undefined,
       customerName: input.customerName ?? undefined,
       customerPhone: input.customerPhone ?? undefined,
       comment: input.comment ?? undefined,
@@ -470,6 +481,7 @@ export async function updateBooking(id: string, input: UpdateBookingInput, actor
         ? `Статус ${before.status} → ${updated.status} · ${updated.code}`
         : `Змінено бронь ${updated.code} (сума ${updated.totalPrice} грн)`) +
       (dateChanged ? `; дата ${before.date} → ${targetDate}` : "") +
+      (locationChanged ? `; локація → ${updated.location.name}` : "") +
       (structureChanges.length ? `; ${structureChanges.join("; ")}` : "") +
       (roomChanges.length ? `; ${roomChanges.join("; ")}` : ""),
     before: {

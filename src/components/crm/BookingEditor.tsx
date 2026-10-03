@@ -47,6 +47,8 @@ export default function BookingEditor({
   // Перенесення свята на інший день: програма їде цілком, з перевіркою
   // зайнятості на новій даті.
   const [date, setDate] = useState(booking.date);
+  // Переїзд на іншу локацію: кімнати підбираються там заново.
+  const [locationId, setLocationId] = useState(booking.locationId);
   const [itemPrices, setItemPrices] = useState<Record<string, number>>(
     Object.fromEntries(booking.items.map((i) => [i.id, i.price]))
   );
@@ -74,11 +76,11 @@ export default function BookingEditor({
   const [busy, setBusy] = useState<Record<string, number[]>>({});
 
   useEffect(() => {
-    fetch(`/api/availability?locationId=${booking.locationId}&date=${booking.date}`)
+    fetch(`/api/availability?locationId=${locationId}&date=${date}`)
       .then((r) => r.json())
       .then((d) => setBusy(d.busyByActivity ?? {}))
       .catch(() => {});
-  }, [booking.locationId, booking.date]);
+  }, [locationId, date]);
   // Внутрішні коментарі менеджерів (окремо від короткого коментаря клієнта)
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
@@ -127,34 +129,40 @@ export default function BookingEditor({
   // Rooms selectable for an item = rooms mapped to its activity at this location.
   const roomOptions = (activityId: string) => {
     const act = catalog.activities.find((a) => a.id === activityId);
-    const ids = act?.roomIdsByLocation[booking.locationId] ?? [];
+    const ids = act?.roomIdsByLocation[locationId] ?? [];
     return ids
       .map((id) => catalog.rooms.find((r) => r.id === id))
       .filter(Boolean) as { id: string; name: string }[];
   };
 
-  const locActivities = catalog.activities.filter((a) =>
-    a.locationIds.includes(booking.locationId)
-  );
+  const locActivities = catalog.activities.filter((a) => a.locationIds.includes(locationId));
   const actById = new Map(catalog.activities.map((a) => [a.id, a]));
-  const loc = catalog.locations.find((l) => l.id === booking.locationId);
-  const startOptions = (() => {
+  const loc = catalog.locations.find((l) => l.id === locationId);
+  // Для коротких сеансів (10/20 хв) потрібен дрібніший крок початку —
+  // інакше два підряд у ту саму півгодину не поставити.
+  const startOptionsFor = (durationMin: number) => {
     const open = loc?.openMin ?? 600;
     const close = loc?.closeMin ?? 1260;
+    const step = durationMin % 30 === 0 ? 30 : 10;
     const arr: number[] = [];
-    for (let m = open; m <= close; m += 30) arr.push(m);
+    for (let m = open; m <= close; m += step) arr.push(m);
     return arr;
-  })();
+  };
   const durationsFor = (activityId: string, current?: number) => {
     const a = actById.get(activityId);
-    const base = a?.durationOptions.length ? a.durationOptions : [a?.durationMin ?? 60];
+    // короткі сеанси 10/20 хв існують лише в CRM — на сайті їх не видно
+    const base = (
+      a?.durationOptions.length
+        ? [...a.durationOptions, ...(a.crmDurationOptions ?? [])]
+        : [a?.durationMin ?? 60]
+    ).sort((x, y) => x - y);
     return current != null && !base.includes(current)
       ? [...base, current].sort((x, y) => x - y)
       : base;
   };
   const variantsFor = (activityId: string) =>
     (actById.get(activityId)?.variants ?? []).filter((v) =>
-      v.locationIds.includes(booking.locationId)
+      v.locationIds.includes(locationId)
     );
 
   // Чи зайнята розвага на цей проміжок. Слоти, які тримає САМА ця бронь,
@@ -222,6 +230,7 @@ export default function BookingEditor({
         body: JSON.stringify({
           status,
           ...(date !== booking.date ? { date } : {}),
+          ...(locationId !== booking.locationId ? { locationId } : {}),
           customerName: name,
           customerPhone: phone,
           people,
@@ -393,14 +402,39 @@ export default function BookingEditor({
               className="w-full rounded-xl border border-[#333] bg-[#0e0e0e] px-3 py-2.5 text-[14px] text-white disabled:opacity-60"
               title="Клієнт переніс святкування — програма переїде на цей день цілком"
             />
-            {date !== booking.date && (
-              <p className="mt-1 text-[11px] text-[#f5a623]">
-                Перенесення з {booking.date}. Години розваг лишаються ті самі — якщо на новий день
-                щось зайняте, збереження не пройде. Ціни не перераховуються (будній/вихідний тариф
-                за потреби змініть вручну).
-              </p>
-            )}
           </div>
+          <div>
+            <Label>Локація</Label>
+            <select
+              value={locationId}
+              disabled={!canWrite}
+              onChange={(e) => {
+                setLocationId(e.target.value);
+                // кімнати старої локації на новій не існують — хай підбере сам
+                setItemRooms(Object.fromEntries(booking.items.map((i) => [i.id, ""])));
+              }}
+              className="w-full rounded-xl border border-[#333] bg-[#0e0e0e] px-3 py-2.5 text-[14px] text-white disabled:opacity-60"
+              title="Переїзд свята на інший клуб — кімнати підберуться там заново"
+            >
+              {catalog.locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {(date !== booking.date || locationId !== booking.locationId) && (
+            <p className="text-[11px] text-[#f5a623] sm:col-span-2">
+              Перенесення
+              {date !== booking.date ? ` з ${booking.date}` : ""}
+              {locationId !== booking.locationId
+                ? ` до «${catalog.locations.find((l) => l.id === locationId)?.name ?? ""}»`
+                : ""}
+              . Години розваг лишаються ті самі — якщо на новому місці щось зайняте або розвага там
+              не проводиться, збереження не пройде і стара бронь залишиться як була. Ціни не
+              перераховуються — за потреби змініть вручну.
+            </p>
+          )}
         </div>
 
         {/* Розваги: час, тривалість, кімната, сценарій, ціна — усе тут */}
@@ -462,7 +496,7 @@ export default function BookingEditor({
                     }`}
                     title="Час початку"
                   >
-                    {startOptions.map((m) => (
+                    {startOptionsFor(t.durationMin).map((m) => (
                       <option key={m} value={m}>
                         {minToHHMM(m)}
                         {slotBusy(i.activityId, m, t.durationMin) ? " · зайнято" : ""}
@@ -604,7 +638,7 @@ export default function BookingEditor({
                         : "border-[#333]"
                     }`}
                   >
-                    {startOptions.map((m) => (
+                    {startOptionsFor(n.durationMin).map((m) => (
                       <option key={m} value={m}>
                         {minToHHMM(m)}
                         {slotBusy(n.activityId, m, n.durationMin) ? " · зайнято" : ""}

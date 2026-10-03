@@ -97,6 +97,7 @@ async function main() {
         perPerson: a.perPerson,
         durationMin: a.durationMin,
         durationOptions: a.durationOptions ? JSON.stringify(a.durationOptions) : "",
+        crmDurationOptions: a.crmDurationOptions ? JSON.stringify(a.crmDurationOptions) : "",
         cleanupMin: a.cleanupMin ?? 0,
         minPeople: a.minPeople,
         maxPeople: a.maxPeople,

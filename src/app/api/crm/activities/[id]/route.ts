@@ -18,6 +18,8 @@ const schema = z.object({
   extraPersonFee: z.number().int().min(0).max(100_000).optional(),
   // true = лише для CRM, на сайті бронювання не показується
   crmOnly: z.boolean().optional(),
+  // Короткі сеанси, доступні лише в CRM (10/20 хв). Повна заміна списку.
+  crmDurationOptions: z.array(z.number().int().min(5).max(600)).max(12).optional(),
   // Full replacement list of locations where the activity is offered, with
   // rooms/arenas count (capacity = parallel groups at that location).
   locations: z
@@ -57,6 +59,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       cleanupMin: parsed.data.cleanupMin ?? undefined,
       extraPersonFee: parsed.data.extraPersonFee ?? undefined,
       crmOnly: parsed.data.crmOnly ?? undefined,
+      crmDurationOptions: parsed.data.crmDurationOptions
+        ? JSON.stringify([...new Set(parsed.data.crmDurationOptions)].sort((a, b) => a - b))
+        : undefined,
     },
   });
 
@@ -83,6 +88,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     changes.push(parsed.data.crmOnly ? "прихована з сайту (лише CRM)" : "показується на сайті");
   if (parsed.data.active != null && parsed.data.active !== before.active)
     changes.push(parsed.data.active ? "увімкнено" : "вимкнено");
+  if (parsed.data.crmDurationOptions && updated.crmDurationOptions !== before.crmDurationOptions)
+    changes.push(
+      `короткі сеанси (лише CRM): ${before.crmDurationOptions || "—"} → ${
+        updated.crmDurationOptions || "—"
+      }`
+    );
 
   // Replace location links if a list was provided; report added/removed/capacity.
   if (parsed.data.locations) {

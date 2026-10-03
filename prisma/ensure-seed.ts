@@ -266,6 +266,20 @@ async function topUp() {
       if (added) console.log(`Top-up: maze → ${added} lasertag arenas.`);
     }
   }
+
+  // 10. Короткі сеанси 10/20 хв — лише в CRM (лазертаг, неотрек, пазли,
+  //     гра в кальмара, лазерний лабіринт). Ціни менеджер вписує сам у
+  //     налаштуваннях; поки їх немає, рахується за тарифом 30 хв.
+  for (const a of ACTIVITIES) {
+    if (!a.crmDurationOptions?.length) continue;
+    const cur = await prisma.activity.findUnique({ where: { key: a.key } });
+    if (!cur || cur.crmDurationOptions) continue;
+    await prisma.activity.update({
+      where: { id: cur.id },
+      data: { crmDurationOptions: JSON.stringify(a.crmDurationOptions) },
+    });
+    console.log(`Top-up: ${a.key} CRM durations ${a.crmDurationOptions.join("/")} min`);
+  }
 }
 
 async function main() {

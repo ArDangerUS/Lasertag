@@ -99,6 +99,8 @@ export type CrmCatalog = {
     crmOnly: boolean;
     durationMin: number;
     durationOptions: number[];
+    // короткі сеанси, які є лише в CRM (на сайті не показуються)
+    crmDurationOptions: number[];
     locationIds: string[];
     // тарифи (для попереднього розрахунку суми прямо у формі)
     prices: { locationId: string | null; durationMin: number | null; weekday: number; weekend: number }[];
@@ -173,6 +175,9 @@ export async function loadCrmCatalog(): Promise<CrmCatalog> {
       crmOnly: a.crmOnly,
       durationMin: a.durationMin,
       durationOptions: a.durationOptions ? (JSON.parse(a.durationOptions) as number[]) : [],
+      crmDurationOptions: a.crmDurationOptions
+        ? (JSON.parse(a.crmDurationOptions) as number[])
+        : [],
       locationIds: a.locations.map((x) => x.locationId),
       prices: a.prices.map((p) => ({
         locationId: p.locationId,

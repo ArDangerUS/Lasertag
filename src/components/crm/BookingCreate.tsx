@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CrmCatalog } from "@/lib/crm-data";
 import { fmtMoney, minToHHMM, usesWeekendRate } from "@/lib/pricing";
 import { computeItemPrice } from "@/lib/item-price";
@@ -374,14 +374,21 @@ export default function BookingCreate({
     slotBusy(l.activityId, l.startMin, l.durationMin)
   ).length;
 
-  const startOptions = useMemo(() => {
-    const loc = catalog.locations.find((l) => l.id === locationId);
-    const open = loc?.openMin ?? 600;
-    const close = loc?.closeMin ?? 1260;
-    const arr: number[] = [];
-    for (let m = open; m <= close; m += 30) arr.push(m);
-    return arr;
-  }, [catalog.locations, locationId]);
+  // Сітка початку — по пів години. Для коротких сеансів (10/20 хв) потрібен
+  // дрібніший крок, інакше два підряд поставити неможливо.
+  const startOptionsFor = useCallback(
+    (durationMin: number) => {
+      const loc = catalog.locations.find((l) => l.id === locationId);
+      const open = loc?.openMin ?? 600;
+      const close = loc?.closeMin ?? 1260;
+      const step = durationMin % 30 === 0 ? 30 : 10;
+      const arr: number[] = [];
+      for (let m = open; m <= close; m += step) arr.push(m);
+      return arr;
+    },
+    [catalog.locations, locationId]
+  );
+  const startOptions = useMemo(() => startOptionsFor(30), [startOptionsFor]);
 
   return (
     <Modal onClose={onClose} title="Нова бронь">
@@ -591,7 +598,12 @@ export default function BookingCreate({
           <div className="flex flex-col gap-2">
             {effectiveLines.map((l, i) => {
               const act = actById.get(l.activityId);
-              const durOptions = act?.durationOptions.length ? act.durationOptions : [act?.durationMin ?? 60];
+              // короткі сеанси 10/20 хв існують лише в CRM
+              const durOptions = (
+                act?.durationOptions.length
+                  ? [...act.durationOptions, ...(act.crmDurationOptions ?? [])]
+                  : [act?.durationMin ?? 60]
+              ).sort((x, y) => x - y);
               const variants = variantOptions(l.activityId);
               const isRoom = act?.category === "room";
               const taken = slotBusy(l.activityId, l.startMin, l.durationMin);
@@ -678,7 +690,7 @@ export default function BookingCreate({
                     }`}
                     title={taken ? "На цей час розвага вже зайнята" : undefined}
                   >
-                    {startOptions.map((m) => (
+                    {startOptionsFor(l.durationMin).map((m) => (
                       <option key={m} value={m}>
                         {minToHHMM(m)}
                         {slotBusy(l.activityId, m, l.durationMin) ? " · зайнято" : ""}

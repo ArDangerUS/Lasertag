@@ -50,6 +50,9 @@ export default async function SettingsPage() {
         maxPeople: a.maxPeople,
         cleanupMin: a.cleanupMin,
         durationOptions: a.durationOptions ? (JSON.parse(a.durationOptions) as number[]) : [],
+        crmDurationOptions: a.crmDurationOptions
+          ? (JSON.parse(a.crmDurationOptions) as number[])
+          : [],
         extraPersonFee: a.extraPersonFee,
         crmOnly: a.crmOnly,
         locations: a.locations.map((x) => ({ locationId: x.locationId, capacity: x.capacity })),

@@ -40,6 +40,8 @@ type Act = {
   cleanupMin: number;
   // дозволені тривалості (лазертаг 30/60) — щоб ціну додавати на потрібну
   durationOptions: number[];
+  // короткі сеанси лише для CRM (10/20 хв) — на сайті їх не видно
+  crmDurationOptions: number[];
   // грн за кожного учасника понад maxPeople; 0 = більшу групу не приймаємо
   extraPersonFee: number;
   // true = лише для CRM: на сайті бронювання розваги не видно
@@ -513,6 +515,10 @@ function ActivityCard({
   const [prices, setPrices] = useState(
     act.prices.map((p) => ({ ...p, wdStr: String(p.priceWeekday), weStr: String(p.priceWeekend) }))
   );
+  // Короткі сеанси лише для CRM (10/20 хв): на сайті їх не видно, менеджер
+  // ставить вручну. Зберігаються разом із рештою полів розваги.
+  const [crmDurations, setCrmDurations] = useState<number[]>(act.crmDurationOptions);
+  const [crmDurStr, setCrmDurStr] = useState(act.crmDurationOptions.join(", "));
   const [savedFlash, setSavedFlash] = useState("");
   const [busy, setBusy] = useState(false);
   // фото: photoUrl = завантажене через CRM; інакше сайт показує /activities/<key>.jpg
@@ -535,19 +541,24 @@ function ActivityCard({
   // по-різному. Рядок із локацією перекриває базовий.
   const [newPrice, setNewPrice] = useState({ locationId: "", durationMin: "", wd: "", we: "" });
   const [addingPrice, setAddingPrice] = useState(false);
-  const durationChoices = act.durationOptions.length ? act.durationOptions : [];
+  // всі тривалості, на які можна задати тариф: з сайту + короткі сеанси CRM
+  const durationChoices = act.durationOptions.length
+    ? [...new Set([...act.durationOptions, ...crmDurations])].sort((a, b) => a - b)
+    : [];
+  const dur = newPrice.durationMin === "" ? null : Number(newPrice.durationMin);
   // локації, де розвага є і де ще немає власної ціни на цю тривалість
   const priceLocOptions = locations.filter((l) => {
     if (!act.locations.some((x) => x.locationId === l.id)) return false;
-    const dur = newPrice.durationMin === "" ? null : Number(newPrice.durationMin);
     return !prices.some((p) => p.locationId === l.id && (p.durationMin ?? null) === dur);
   });
+  // базову ціну (для всіх локацій) на цю тривалість ще не задано
+  const baseFree = !prices.some((p) => p.locationId == null && (p.durationMin ?? null) === dur);
 
   async function addPrice() {
     const wd = parseInt(newPrice.wd, 10);
     const we = parseInt(newPrice.we, 10);
-    if (!newPrice.locationId || !Number.isFinite(wd) || !Number.isFinite(we)) {
-      flash("Оберіть локацію і вкажіть обидві ціни");
+    if (!Number.isFinite(wd) || !Number.isFinite(we)) {
+      flash("Вкажіть обидві ціни");
       return;
     }
     setBusy(true);
@@ -557,8 +568,8 @@ function ActivityCard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           activityId: act.id,
-          locationId: newPrice.locationId,
-          durationMin: newPrice.durationMin === "" ? null : Number(newPrice.durationMin),
+          locationId: newPrice.locationId || null, // порожньо = для всіх локацій
+          durationMin: dur,
           priceWeekday: wd,
           priceWeekend: we,
         }),
@@ -639,6 +650,7 @@ function ActivityCard({
           maxPeople: max,
           cleanupMin: cleanup,
           extraPersonFee: extra,
+          ...(act.durationOptions.length ? { crmDurationOptions: crmDurations } : {}),
           locations: Object.entries(locCaps).map(([locationId, capacity]) => ({
             locationId,
             capacity,
@@ -955,6 +967,36 @@ function ActivityCard({
             className="w-full rounded-lg border border-[#333] bg-[#0e0e0e] px-3 py-2 text-[14px] text-white"
           />
         </div>
+        {act.durationOptions.length > 0 && (
+          <div>
+            <div className="mb-1 text-[11px] font-bold uppercase text-[#777]">
+              Короткі сеанси, хв (лише CRM)
+            </div>
+            <input
+              type="text"
+              value={crmDurStr}
+              placeholder="10, 20"
+              onChange={(e) => {
+                setCrmDurStr(e.target.value);
+                setCrmDurations(
+                  Array.from(
+                    new Set(
+                      e.target.value
+                        .split(/[,\s/]+/)
+                        .map((x) => parseInt(x, 10))
+                        .filter((n) => Number.isFinite(n) && n >= 5 && n <= 600)
+                    )
+                  ).sort((a, b) => a - b)
+                );
+              }}
+              className="w-full rounded-lg border border-[#333] bg-[#0e0e0e] px-3 py-2 text-[14px] text-white"
+              title="Тривалості, доступні лише менеджеру в CRM. На сайті їх не видно."
+            />
+            <div className="mt-1 text-[11px] text-[#777]">
+              на сайті не показуються; ціну на кожну задайте нижче
+            </div>
+          </div>
+        )}
       </div>
 
       {/* prices */}
@@ -1049,12 +1091,13 @@ function ActivityCard({
             onClick={() => setAddingPrice(true)}
             className="rounded-full bg-[#0e0e0e] px-3 py-1.5 text-[12px] font-bold text-[#56EF02] ring-1 ring-[#333]"
           >
-            + Ціна для окремої локації
+            + Додати ціну
           </button>
         ) : (
           <div className="rounded-xl bg-[#0e0e0e] p-3">
             <div className="mb-2 text-[11px] text-[#777]">
-              Ціна для однієї локації перекриває базову. Решта локацій працюють за базовою.
+              «Усі локації» = базова ціна. Рядок з конкретною локацією перекриває базову саме для
+              неї, решта працюють за базовою.
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <select
@@ -1062,7 +1105,13 @@ function ActivityCard({
                 onChange={(e) => setNewPrice((v) => ({ ...v, locationId: e.target.value }))}
                 className="rounded-lg border border-[#333] bg-[#161616] px-2 py-1.5 text-[13px] text-white"
               >
-                <option value="">— локація —</option>
+                {baseFree ? (
+                  <option value="">усі локації (базова)</option>
+                ) : (
+                  <option value="" disabled>
+                    — оберіть локацію —
+                  </option>
+                )}
                 {priceLocOptions.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.name}
@@ -1113,8 +1162,20 @@ function ActivityCard({
             </div>
             {durationChoices.length > 0 && (
               <div className="mt-2 text-[11px] text-[#777]">
-                У цієї розваги тарифи по тривалості ({durationChoices.join(" / ")} хв) — додайте
-                окремий рядок на кожну, інакше для решти діятиме базова ціна.
+                У цієї розваги тарифи по тривалості ({durationChoices.join(" / ")} хв) — потрібен
+                окремий рядок на кожну.
+                {(() => {
+                  const missing = durationChoices.filter(
+                    (d) => !prices.some((p) => p.durationMin === d)
+                  );
+                  return missing.length ? (
+                    <span className="text-[#f5a623]">
+                      {" "}
+                      Ціни немає для: {missing.join(" / ")} хв — поки рахується за найближчим
+                      тарифом 30 хв.
+                    </span>
+                  ) : null;
+                })()}
               </div>
             )}
           </div>
