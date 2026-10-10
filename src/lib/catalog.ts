@@ -686,13 +686,16 @@ export const ROOMS: SeedRoom[] = [
   { loc: "gorodok", key: "puzzles", name: "Кімната «Пазли»" },
   { loc: "gorodok", key: "lasermaze", name: "Кімната «Лазерний лабіринт»" },
   { loc: "gorodok", key: "showroom", name: "Кімната шоу-програм", note: "шоу та майстер-класи — бронює менеджер" },
-  { loc: "gorodok", key: "banquet-cosmos", name: "Банкетна «Космос»" },
-  { loc: "gorodok", key: "banquet-kayuta-1", name: "Банкетна «Каюта 1»" },
-  { loc: "gorodok", key: "banquet-kayuta-2", name: "Банкетна «Каюта 2»" },
-  { loc: "gorodok", key: "banquet-minecraft", name: "Банкетна «Майнкрафт»" },
-  { loc: "gorodok", key: "banquet-dino", name: "Банкетна «Динозаври»" },
-  { loc: "gorodok", key: "banquet-avatar", name: "Банкетна «Аватар»" },
-  { loc: "gorodok", key: "banquet-potter", name: "Банкетна «Гаррі Поттер»" },
+  // Банкетні зали Городка нумеруються «Каюта 1…7», у кожної своя тематика.
+  // Ключі лишаємо історичні (на них зав'язані наявні броні), а порядок і
+  // назви — як у клубі.
+  { loc: "gorodok", key: "banquet-kayuta-1", name: "Каюта 1" },
+  { loc: "gorodok", key: "banquet-cosmos", name: "Каюта 2 «Космос»" },
+  { loc: "gorodok", key: "banquet-kayuta-2", name: "Каюта 3 «Зомбі рослини»" },
+  { loc: "gorodok", key: "banquet-minecraft", name: "Каюта 4 «Майнкрафт»" },
+  { loc: "gorodok", key: "banquet-potter", name: "Каюта 5 «Гаррі Поттер»" },
+  { loc: "gorodok", key: "banquet-dino", name: "Каюта 6 «Динозаври»" },
+  { loc: "gorodok", key: "banquet-avatar", name: "Каюта 7 «Аватар»" },
 ];
 
 // activityKey -> room refs "loc:key". Лазертаг і сценарний ділять арени.

@@ -6,7 +6,7 @@
 // записи, яких раніше не існувало, додаються без чіпання броней і цін.
 import { execSync } from "child_process";
 import { PrismaClient } from "@prisma/client";
-import { ACTIVITIES, ACTIVITY_ROOMS, ACTIVITY_VARIANTS } from "../src/lib/catalog";
+import { ACTIVITIES, ACTIVITY_ROOMS, ACTIVITY_VARIANTS, ROOMS } from "../src/lib/catalog";
 
 const prisma = new PrismaClient();
 
@@ -280,7 +280,35 @@ async function topUp() {
     });
     console.log(`Top-up: ${a.key} CRM durations ${a.crmDurationOptions.join("/")} min`);
   }
+
+  // 11. Банкетні зали Городка: у клубі вони звуться «Каюта 1…7», кожна зі
+  //     своєю тематикою. Ключі лишаємо старі (на них зав'язані наявні
+  //     броні), міняємо лише назви й порядок.
+  const gorodok = await prisma.location.findUnique({ where: { slug: "gorodok" } });
+  if (gorodok) {
+    const order = GORODOK_BANQUETS.map((r) => r.key);
+    const rooms = await prisma.room.findMany({
+      where: { locationId: gorodok.id, key: { in: order } },
+    });
+    const stale = rooms.find((r) => r.key === "banquet-kayuta-2" && r.name === "Банкетна «Каюта 2»");
+    if (stale && rooms.length === order.length) {
+      const base = Math.min(...rooms.map((r) => r.sortOrder));
+      for (let i = 0; i < GORODOK_BANQUETS.length; i++) {
+        const want = GORODOK_BANQUETS[i];
+        await prisma.room.update({
+          where: { locationId_key: { locationId: gorodok.id, key: want.key } },
+          data: { name: want.name, sortOrder: base + i },
+        });
+      }
+      console.log("Top-up: Gorodok banquet rooms renamed to Каюта 1–7.");
+    }
+  }
 }
+
+// Городок: «Каюта N» + тематика. Порядок = порядок у клубі.
+const GORODOK_BANQUETS = ROOMS.filter(
+  (r) => r.loc === "gorodok" && r.key.startsWith("banquet-")
+);
 
 async function main() {
   let users = 0;
